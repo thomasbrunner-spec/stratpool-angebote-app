@@ -34,6 +34,9 @@ from scripts.extract import extract
 VALID_STATUSES = {"draft", "sent", "won", "lost"}
 VALID_CONSULTING_TYPES = {"ki_strategie", "ai_design_sprint", "prozessberatung", "workshop"}
 
+# Voyage free tier: 3 RPM. Sleep between embed calls to stay under the limit.
+EMBED_SLEEP_SECONDS = 25
+
 
 def _yaml_path() -> Path:
     return Path(__file__).resolve().parent.parent / "seeds" / "bestandsangebote.yaml"
@@ -81,25 +84,33 @@ async def _seed() -> None:
 
     client_names = [e["client_name"] for e in entries]
 
+    # Step 1: idempotent cleanup, committed up front so partial progress on
+    # the embed loop below isn't lost on rate-limit failures.
     async with AsyncSessionLocal() as session:
-        # Idempotency: delete existing offers with the same client_names.
-        # Cascades drop offer_versions + offer_embeddings.
         deleted = await session.execute(
             delete(Offer).where(Offer.client_name.in_(client_names))
         )
+        await session.commit()
         if deleted.rowcount:
             logger.info(f"Removed {deleted.rowcount} existing offer(s) before reseeding.")
 
-        for entry in entries:
-            slug = entry["slug"]
-            logger.info(f"[{slug}] extracting {Path(entry['source_file']).name}")
-            raw_md = extract(Path(entry["source_file"]))
-            redact_map: dict[str, str] = entry.get("redact") or {}
-            anonymized = anonymize(raw_md, redact_map)
+    # Step 2: one transaction per offer so a Voyage rate-limit hit on entry N
+    # doesn't roll back entries 1..N-1.
+    for i, entry in enumerate(entries):
+        slug = entry["slug"]
+        if i > 0:
+            logger.info(f"sleeping {EMBED_SLEEP_SECONDS}s for Voyage RPM limit")
+            await asyncio.sleep(EMBED_SLEEP_SECONDS)
 
-            logger.info(f"[{slug}] embedding ({len(anonymized)} chars)")
-            vector = await embed_text(anonymized)
+        logger.info(f"[{slug}] extracting {Path(entry['source_file']).name}")
+        raw_md = extract(Path(entry["source_file"]))
+        redact_map: dict[str, str] = entry.get("redact") or {}
+        anonymized = anonymize(raw_md, redact_map)
 
+        logger.info(f"[{slug}] embedding ({len(anonymized)} chars)")
+        vector = await embed_text(anonymized)
+
+        async with AsyncSessionLocal() as session:
             offer = Offer(
                 client_name=entry["client_name"],
                 industry=entry.get("industry"),
@@ -109,7 +120,6 @@ async def _seed() -> None:
             )
             session.add(offer)
             await session.flush()
-
             session.add(
                 OfferVersion(
                     offer_id=offer.id,
@@ -128,11 +138,11 @@ async def _seed() -> None:
                     summary=anonymized,
                 )
             )
-            logger.info(f"[{slug}] queued offer {offer.id}")
+            await session.commit()
+            logger.info(f"[{slug}] inserted offer {offer.id}")
 
-        await session.commit()
-
-        # Verification: count rows for the seeded client_names.
+    # Verification.
+    async with AsyncSessionLocal() as session:
         rows = (
             await session.execute(
                 select(Offer.client_name, Offer.id).where(
@@ -140,9 +150,9 @@ async def _seed() -> None:
                 )
             )
         ).all()
-        logger.info(f"Seed complete — {len(rows)} offers in DB:")
-        for name, oid in rows:
-            logger.info(f"  {name}  {oid}")
+    logger.info(f"Seed complete — {len(rows)} offers in DB:")
+    for name, oid in rows:
+        logger.info(f"  {name}  {oid}")
 
 
 def main() -> None:
