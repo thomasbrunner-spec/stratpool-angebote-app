@@ -1,0 +1,64 @@
+# ===================================================================
+# StratPool App Template – Docker Compose
+# ===================================================================
+# Local dev: docker compose up
+# Coolify:   set this file as the deployment compose. Coolify reads
+#            the SERVICE_FQDN_* labels and injects routing automatically.
+# ===================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-stratpool-app}-backend
+    restart: unless-stopped
+    environment:
+      APP_NAME: ${APP_NAME:-stratpool-app}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      API_PREFIX: /api/v1
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${SERVICE_FQDN_FRONTEND}}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3-large}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Coolify discovers this service for routing if you set SERVICE_FQDN_BACKEND
+    # in your Coolify env. Otherwise it stays internal-only.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      secrets:
+        - npm_token
+    container_name: ${COMPOSE_PROJECT_NAME:-stratpool-app}-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      BACKEND_API_URL: http://backend:8000
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+secrets:
+  npm_token:
+    file: ./.npm-token
