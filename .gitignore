@@ -44,3 +44,7 @@ Thumbs.db
 
 # Docker
 **/docker-compose.override.yml
+
+# Seed data with PII (only the .example.yaml is committed)
+backend/seeds/*.yaml
+!backend/seeds/*.example.yaml

@@ -1,0 +1,26 @@
+# Seed-Schema für Bestandsangebote (Few-Shot-Pool).
+#
+# Ablauf beim Seeden:
+#   1. source_file wird via scripts.extract als Markdown gelesen.
+#   2. 'redact' wird auf den extrahierten Text angewendet
+#      (key = Originalstring, value = Ersatz; leerer String = ersatzlos entfernen).
+#   3. Anonymisierter Markdown landet in offer_versions.content_json.markdown.
+#   4. Voyage-Embedding wird über denselben anonymisierten Text gerechnet.
+#
+# Diese Datei (.example.yaml) ist die Schema-Referenz, ohne PII, committed.
+# Die echte 'bestandsangebote.yaml' enthält Original-Namen/Adressen und ist gitignored.
+
+offers:
+  - slug: example-customer
+    source_file: "/absolute/path/to/Angebot.pdf"
+    client_name: "Kunde X"
+    industry: "Maschinenbau"
+    consulting_type: ki_strategie       # ki_strategie | ai_design_sprint | prozessberatung | workshop
+    status: won                         # draft | sent | won | lost
+    price_eur: 24500
+    redact:
+      "Originalfirma GmbH": "Kunde X"
+      "Originalfirma": "Kunde X"
+      "Max Mustermann": ""
+      "Hauptstraße 1": ""
+      "12345 Musterstadt": ""
