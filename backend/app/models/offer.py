@@ -51,7 +51,12 @@ class Offer(Base):
     price_eur: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("auth.users.id", ondelete="SET NULL"),
+        ForeignKey(
+            "auth.users.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="offers_user_id_fkey",
+        ),
         nullable=True,
         index=True,
     )
