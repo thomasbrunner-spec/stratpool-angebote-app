@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  Button,
   Card,
   Header,
   Badge,
@@ -33,13 +35,18 @@ export default async function DashboardPage() {
       />
 
       <main className="container max-w-4xl mx-auto px-6 py-12 space-y-8">
-        <div className="space-y-2">
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
-            Dashboard
-          </h1>
-          <p className="text-text-dim">
-            You're signed in as <code className="font-mono text-signal">{user.email}</code>
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="font-display text-3xl font-semibold tracking-tight">
+              Dashboard
+            </h1>
+            <p className="text-text-dim">
+              You're signed in as <code className="font-mono text-signal">{user.email}</code>
+            </p>
+          </div>
+          <Link href="/angebote/neu">
+            <Button variant="primary">Neues Angebot</Button>
+          </Link>
         </div>
 
         <Card>
