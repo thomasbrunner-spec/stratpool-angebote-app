@@ -59,6 +59,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    expose:
+      - "3000"
     environment:
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
