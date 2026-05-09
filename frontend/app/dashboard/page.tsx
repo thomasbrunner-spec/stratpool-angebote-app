@@ -44,9 +44,14 @@ export default async function DashboardPage() {
               You're signed in as <code className="font-mono text-signal">{user.email}</code>
             </p>
           </div>
-          <Link href="/angebote/neu">
-            <Button variant="primary">Neues Angebot</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/angebote">
+              <Button variant="secondary">Angebote</Button>
+            </Link>
+            <Link href="/angebote/neu">
+              <Button variant="primary">Neues Angebot</Button>
+            </Link>
+          </div>
         </div>
 
         <Card>

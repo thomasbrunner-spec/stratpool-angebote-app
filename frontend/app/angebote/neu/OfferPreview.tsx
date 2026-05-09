@@ -1,5 +1,6 @@
 import { Badge, Card } from "@thomasbrunner-spec/design-system";
-import type { OfferContent, OfferGenerateResponse } from "@/lib/types/offer";
+import { OfferContentView } from "@/components/OfferContentView";
+import type { OfferGenerateResponse } from "@/lib/types/offer";
 
 interface OfferPreviewProps {
   result: OfferGenerateResponse;
@@ -26,59 +27,9 @@ export function OfferPreview({ result }: OfferPreviewProps) {
         </div>
       </div>
 
-      <Section title="Ausgangssituation" body={c.ausgangssituation} />
-      <Section title="Leistungsumfang" body={c.leistungsumfang_intro} />
-
-      <Card>
-        <Card.Header>
-          <Card.Title>Bestandteile</Card.Title>
-          <Card.Description>{c.bestandteile.length} Pakete</Card.Description>
-        </Card.Header>
-        <Card.Content className="space-y-5">
-          {c.bestandteile.map((b, i) => (
-            <Bestandteil key={i} index={i + 1} titel={b.titel} beschreibung={b.beschreibung} />
-          ))}
-        </Card.Content>
-      </Card>
-
-      <Section title="Leistungserbringung" body={c.leistungserbringung} />
-      <Section title="Investition" body={c.investition} />
-      <Section title="Rahmenbedingungen" body={c.rahmenbedingungen} />
+      <OfferContentView content={c} />
 
       <Meta result={result} />
-    </div>
-  );
-}
-
-function Section({ title, body }: { title: string; body: string }) {
-  return (
-    <Card>
-      <Card.Header>
-        <Card.Title>{title}</Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <p className="whitespace-pre-line leading-relaxed text-text">{body}</p>
-      </Card.Content>
-    </Card>
-  );
-}
-
-function Bestandteil({
-  index,
-  titel,
-  beschreibung,
-}: {
-  index: number;
-  titel: string;
-  beschreibung: string;
-}) {
-  return (
-    <div className="space-y-2 border-l-2 border-signal/40 pl-4">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-xs text-signal">#{index}</span>
-        <h4 className="font-display text-lg font-semibold">{titel}</h4>
-      </div>
-      <p className="whitespace-pre-line leading-relaxed text-text-dim">{beschreibung}</p>
     </div>
   );
 }
@@ -111,5 +62,3 @@ function MetaRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-export type { OfferContent };

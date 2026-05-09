@@ -50,3 +50,40 @@ export interface OfferGenerateResponse {
   retrieved_offer_ids: string[];
   created_at: string;
 }
+
+export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
+  draft: "Entwurf",
+  sent: "Offen",
+  won: "Gewonnen",
+  lost: "Verloren",
+};
+
+export interface OfferListItem {
+  id: string;
+  client_name: string;
+  industry: string | null;
+  consulting_type: ConsultingType;
+  status: OfferStatus;
+  price_eur: number | string | null;
+  created_at: string;
+  latest_version_number: number;
+}
+
+export interface OfferDetail {
+  id: string;
+  client_name: string;
+  industry: string | null;
+  consulting_type: ConsultingType;
+  status: OfferStatus;
+  price_eur: number | string | null;
+  created_at: string;
+  updated_at: string;
+  version_id: string;
+  version_number: number;
+  version_created_at: string;
+  content: OfferContent;
+}
+
+export interface OfferStatusUpdate {
+  status: OfferStatus;
+}
