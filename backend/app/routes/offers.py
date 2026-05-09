@@ -19,10 +19,13 @@ from app.schemas.offer import (
     OfferGenerateRequest,
     OfferGenerateResponse,
     OfferListItem,
+    OfferRenderResponse,
     OfferStatusUpdate,
 )
 from app.services.auth import CurrentUser
 from app.services.offer_generator import generate_offer
+from app.services.render_via_skill import RenderError, render_offer_via_skill
+from app.services.storage import render_path, signed_url, upload_render
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 
@@ -115,7 +118,7 @@ async def _load_detail(session: AsyncSession, offer_id: uuid.UUID) -> OfferDetai
     offer = await session.get(
         Offer,
         offer_id,
-        options=[selectinload(Offer.versions)],
+        options=[selectinload(Offer.versions), selectinload(Offer.co_consultant)],
         populate_existing=True,
     )
     if offer is None:
@@ -153,6 +156,8 @@ async def _load_detail(session: AsyncSession, offer_id: uuid.UUID) -> OfferDetai
         version_number=latest.version_number,
         version_created_at=latest.created_at,
         content=content,
+        co_consultant_id=offer.co_consultant_id,
+        co_consultant_name=offer.co_consultant.name if offer.co_consultant else None,
     )
 
 
@@ -183,3 +188,79 @@ async def update_offer_status(
     offer.status = body.status
     await session.commit()
     return await _load_detail(session, offer_id)
+
+
+_PPTX_MIME = (
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+)
+_SIGNED_URL_TTL_SECONDS = 3600
+
+
+def _filename_prefix(client_name: str) -> str:
+    """`Angebot - <kunde>` with reserved chars stripped, safe for HTTP headers."""
+    safe = "".join(c for c in client_name if c.isalnum() or c in " .-_").strip()
+    return f"Angebot - {safe or 'Angebot'}"
+
+
+@router.post("/{offer_id}/render", response_model=OfferRenderResponse)
+async def render_offer_endpoint(
+    offer_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferRenderResponse:
+    """Render the offer's latest version to PPT (and later Word).
+
+    Cached: if the version already has a stored artifact, the bytes are not
+    re-generated — only a fresh signed URL is returned.
+    """
+    offer = await session.get(
+        Offer,
+        offer_id,
+        options=[selectinload(Offer.versions), selectinload(Offer.co_consultant)],
+        populate_existing=True,
+    )
+    if offer is None:
+        raise HTTPException(status_code=404, detail=f"Offer {offer_id} not found")
+    if not offer.versions:
+        raise HTTPException(status_code=409, detail="Offer has no versions")
+
+    latest = max(offer.versions, key=lambda v: v.version_number)
+    if not _is_user_content(latest.content_json):
+        raise HTTPException(status_code=410, detail="Legacy pool entry is not renderable")
+
+    if not latest.pptx_path:
+        try:
+            payload = await render_offer_via_skill(
+                transcript=latest.transcript or "",
+                user_notes=latest.user_notes,
+                client_name=offer.client_name,
+                industry=offer.industry,
+                consulting_type=offer.consulting_type,
+                price_eur=offer.price_eur,
+                co_consultant=offer.co_consultant,
+            )
+        except RenderError as exc:
+            logger.exception("skill-render failed (configuration / output)")
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("skill-render unexpected error")
+            raise HTTPException(status_code=500, detail=f"Render failed: {exc}") from exc
+        storage_path = render_path(str(offer_id), latest.version_number, "pptx")
+        await upload_render(storage_path, payload, _PPTX_MIME)
+        latest.pptx_path = storage_path
+        await session.commit()
+
+    pptx_url = await signed_url(latest.pptx_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+
+    word_url = None
+    if latest.word_path:
+        word_url = await signed_url(latest.word_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+
+    return OfferRenderResponse(
+        offer_id=offer.id,
+        version_id=latest.id,
+        version_number=latest.version_number,
+        pptx_url=pptx_url,
+        word_url=word_url,
+        filename_prefix=_filename_prefix(offer.client_name),
+    )

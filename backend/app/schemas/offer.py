@@ -31,6 +31,10 @@ class OfferGenerateRequest(BaseModel):
     price_eur: Decimal = Field(gt=0)
     transcript: str = Field(min_length=50, description="Discovery-call transcript")
     user_notes: str | None = Field(default=None, max_length=5000)
+    co_consultant_id: uuid.UUID | None = Field(
+        default=None,
+        description="Optional consultant from the consultants table — appears as second person on the cover slide",
+    )
 
 
 class OfferContentBestandteil(BaseModel):
@@ -94,9 +98,22 @@ class OfferDetail(BaseModel):
     version_number: int
     version_created_at: datetime
     content: OfferContent
+    co_consultant_id: uuid.UUID | None = None
+    co_consultant_name: str | None = None
 
 
 class OfferStatusUpdate(BaseModel):
     """Body for PATCH /offers/{id}."""
 
     status: OfferStatus
+
+
+class OfferRenderResponse(BaseModel):
+    """Signed download URLs for the rendered artifacts of an offer's latest version."""
+
+    offer_id: uuid.UUID
+    version_id: uuid.UUID
+    version_number: int
+    pptx_url: str | None = None
+    word_url: str | None = None
+    filename_prefix: str

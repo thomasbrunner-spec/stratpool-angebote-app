@@ -36,7 +36,10 @@ from app.services.retrieval import RetrievedOffer, retrieve_similar_offers
 settings = get_settings()
 
 DEFAULT_K = 3
-MAX_OUTPUT_TOKENS = 4096
+# 8192 leaves comfortable headroom for full OfferContent JSON. At 4096 Claude
+# was getting cut mid-tool-call and returned partial JSON with literal
+# `$PARAMETER_NAME` placeholder keys, which then failed Pydantic validation.
+MAX_OUTPUT_TOKENS = 8192
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _SKELETON_PATH = _PROMPTS_DIR / "offer_skeleton.md"
@@ -165,6 +168,13 @@ async def _call_claude_for_offer(
         messages=[{"role": "user", "content": user_message}],
     )
 
+    if response.stop_reason == "max_tokens":
+        raise RuntimeError(
+            "Claude wurde vom Token-Limit abgeschnitten — Output ist unvollständig. "
+            f"max_tokens={MAX_OUTPUT_TOKENS}, stop_reason={response.stop_reason}. "
+            "Bitte den Transkript-Input prüfen oder MAX_OUTPUT_TOKENS erhöhen."
+        )
+
     tool_blocks = [b for b in response.content if isinstance(b, ToolUseBlock)]
     if not tool_blocks:
         snippet = json.dumps([b.model_dump() for b in response.content])[:500]
@@ -214,6 +224,7 @@ async def generate_offer(
         status="draft",
         price_eur=request.price_eur,
         user_id=user_id,
+        co_consultant_id=request.co_consultant_id,
     )
     session.add(offer)
     await session.flush()

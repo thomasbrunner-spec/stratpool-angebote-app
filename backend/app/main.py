@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.config import get_settings
-from app.routes import health, hello, offers
+from app.routes import consultants, health, hello, offers
 
 settings = get_settings()
 
@@ -65,6 +65,7 @@ app.add_middleware(
 app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(hello.router, prefix=settings.api_prefix)
 app.include_router(offers.router, prefix=settings.api_prefix)
+app.include_router(consultants.router, prefix=settings.api_prefix)
 
 
 @app.get("/")

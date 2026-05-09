@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { OfferContentView } from "@/components/OfferContentView";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusSelector } from "@/components/StatusSelector";
+import { DownloadButtons } from "@/components/DownloadButtons";
 import {
   CONSULTING_TYPE_LABELS,
   type OfferDetail,
@@ -114,8 +115,12 @@ export default async function AngebotDetailPage({ params }: PageProps) {
               label="Version erstellt"
               value={DATE_FORMAT.format(new Date(offer.version_created_at))}
             />
+            <Meta label="Co-Berater" value={offer.co_consultant_name ?? "—"} />
             <StatusSelector offerId={offer.id} initialStatus={offer.status} />
           </Card.Content>
+          <Card.Footer>
+            <DownloadButtons offerId={offer.id} />
+          </Card.Footer>
         </Card>
 
         <OfferContentView content={offer.content} />

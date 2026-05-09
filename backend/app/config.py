@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str
     anthropic_model: str = "claude-opus-4-7"
+    # Used by the skill-driven PPT renderer. Sonnet 4.6 turned out to spin in
+    # error-recovery loops on this task; Opus 4.7 is more efficient end-to-end
+    # despite its higher per-token cost. Without few-shots input-tokens stay
+    # well under 100k, so total cost remains around $0.15-0.30 per render.
+    render_model: str = "claude-opus-4-7"
 
     # Voyage AI
     voyage_api_key: str
@@ -49,6 +54,25 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str  # = Supabase JWT Secret
     jwt_algorithm: str = "HS256"
+
+    # Berater profile (primary consultant on the right of the cover slide).
+    # Single-tenant for now — moves to a per-user profile when we onboard a
+    # second user. The secondary consultant is per-offer (see consultants table).
+    berater_name: str = "Thomas Brunner"
+    berater_titel: str = "Senior Partner"
+    berater_tel: str = ""
+    berater_email: str = "tbrunner@eragroup.com"
+
+    # Storage bucket for rendered Word/PPT artifacts
+    render_storage_bucket: str = "offer-renders"
+
+    # Anthropic Skills + few-shot pool (Code-Execution rendering)
+    era_presentation_skill_id: str = ""
+    few_shot_file_ids: str = ""
+
+    @property
+    def few_shot_file_id_list(self) -> list[str]:
+        return [s.strip() for s in self.few_shot_file_ids.split(",") if s.strip()]
 
 
 @lru_cache

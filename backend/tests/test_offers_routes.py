@@ -36,3 +36,11 @@ async def test_patch_offer_requires_auth() -> None:
             f"/api/v1/offers/{fake_id}", json={"status": "sent"}
         )
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_render_offer_requires_auth() -> None:
+    fake_id = uuid.uuid4()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(f"/api/v1/offers/{fake_id}/render")
+    assert response.status_code == 401

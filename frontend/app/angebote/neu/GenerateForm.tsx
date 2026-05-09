@@ -8,6 +8,12 @@ import {
   type OfferGenerateRequest,
   type OfferGenerateResponse,
 } from "@/lib/types/offer";
+import type { Consultant } from "@/lib/types/consultant";
+import {
+  CoConsultantSelector,
+  EMPTY_CO_CONSULTANT,
+  type CoConsultantSelectorValue,
+} from "@/components/CoConsultantSelector";
 import { OfferPreview } from "./OfferPreview";
 
 const FIELD_DEFAULTS = {
@@ -21,6 +27,7 @@ const FIELD_DEFAULTS = {
 
 export function GenerateForm() {
   const [fields, setFields] = useState(FIELD_DEFAULTS);
+  const [coConsultant, setCoConsultant] = useState<CoConsultantSelectorValue>(EMPTY_CO_CONSULTANT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OfferGenerateResponse | null>(null);
@@ -28,6 +35,31 @@ export function GenerateForm() {
 
   const update = <K extends keyof typeof fields>(key: K, value: (typeof fields)[K]) =>
     setFields((prev) => ({ ...prev, [key]: value }));
+
+  const resolveCoConsultantId = async (): Promise<string | null> => {
+    if (coConsultant.mode === "none") return null;
+    if (coConsultant.mode === "existing") return coConsultant.existingId;
+    const newC = coConsultant.newConsultant;
+    if (!newC.name.trim()) {
+      throw new Error("Co-Berater: Name ist Pflicht, wenn ein neuer Berater angelegt wird.");
+    }
+    const response = await fetch("/api/consultants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newC.name.trim(),
+        titel: newC.titel?.trim() || null,
+        tel: newC.tel?.trim() || null,
+        email: newC.email?.trim() || null,
+      }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error ?? `Berater anlegen fehlgeschlagen (${response.status})`);
+    }
+    const created = (await response.json()) as Consultant;
+    return created.id;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,16 +79,19 @@ export function GenerateForm() {
       return;
     }
 
-    const payload: OfferGenerateRequest = {
-      client_name: fields.client_name.trim(),
-      consulting_type: fields.consulting_type,
-      industry: fields.industry.trim() || null,
-      price_eur: price,
-      transcript: fields.transcript.trim(),
-      user_notes: fields.user_notes.trim() || null,
-    };
-
     try {
+      const coConsultantId = await resolveCoConsultantId();
+
+      const payload: OfferGenerateRequest = {
+        client_name: fields.client_name.trim(),
+        consulting_type: fields.consulting_type,
+        industry: fields.industry.trim() || null,
+        price_eur: price,
+        transcript: fields.transcript.trim(),
+        user_notes: fields.user_notes.trim() || null,
+        co_consultant_id: coConsultantId,
+      };
+
       const response = await fetch("/api/offers/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,7 +102,6 @@ export function GenerateForm() {
         throw new Error(data?.error ?? `Request failed: ${response.status}`);
       }
       setResult(data as OfferGenerateResponse);
-      // Scroll the preview into view on the next paint.
       requestAnimationFrame(() =>
         previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
       );
@@ -148,6 +182,12 @@ export function GenerateForm() {
                 />
               </Field>
             </div>
+
+            <CoConsultantSelector
+              value={coConsultant}
+              onChange={setCoConsultant}
+              disabled={loading}
+            />
 
             <Field>
               <Label htmlFor="transcript">Discovery-Transkript</Label>

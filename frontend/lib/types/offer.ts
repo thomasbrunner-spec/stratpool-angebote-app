@@ -24,6 +24,7 @@ export interface OfferGenerateRequest {
   price_eur: number;
   transcript: string;
   user_notes: string | null;
+  co_consultant_id: string | null;
 }
 
 export interface OfferContentBestandteil {
@@ -82,8 +83,19 @@ export interface OfferDetail {
   version_number: number;
   version_created_at: string;
   content: OfferContent;
+  co_consultant_id: string | null;
+  co_consultant_name: string | null;
 }
 
 export interface OfferStatusUpdate {
   status: OfferStatus;
+}
+
+export interface OfferRenderResponse {
+  offer_id: string;
+  version_id: string;
+  version_number: number;
+  pptx_url: string | null;
+  word_url: string | null;
+  filename_prefix: string;
 }

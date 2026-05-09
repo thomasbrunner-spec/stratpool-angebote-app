@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
+    from app.models.consultant import Consultant
     from app.models.offer_embedding import OfferEmbedding
     from app.models.offer_version import OfferVersion
 
@@ -60,6 +61,12 @@ class Offer(Base):
         nullable=True,
         index=True,
     )
+    co_consultant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("consultants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now(), index=True
     )
@@ -75,3 +82,4 @@ class Offer(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    co_consultant: Mapped[Consultant | None] = relationship(back_populates="offers")

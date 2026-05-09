@@ -21,6 +21,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${SERVICE_FQDN_FRONTEND}}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+      RENDER_MODEL: ${RENDER_MODEL:-claude-opus-4-7}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3-large}
       SUPABASE_URL: ${SUPABASE_URL}
@@ -28,6 +29,13 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
+      BERATER_NAME: ${BERATER_NAME:-Thomas Brunner}
+      BERATER_TITEL: ${BERATER_TITEL:-Senior Partner}
+      BERATER_TEL: ${BERATER_TEL:-}
+      BERATER_EMAIL: ${BERATER_EMAIL:-tbrunner@eragroup.com}
+      RENDER_STORAGE_BUCKET: ${RENDER_STORAGE_BUCKET:-offer-renders}
+      ERA_PRESENTATION_SKILL_ID: ${ERA_PRESENTATION_SKILL_ID:-}
+      FEW_SHOT_FILE_IDS: ${FEW_SHOT_FILE_IDS:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/').read()"]
       interval: 10s

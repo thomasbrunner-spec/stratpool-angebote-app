@@ -49,3 +49,7 @@ Thumbs.db
 # Seed data with PII (only the .example.yaml is committed)
 backend/seeds/*.yaml
 !backend/seeds/*.example.yaml
+
+# Local-only reference files (e.g. real ERA offer PPTs for layout reference)
+backend/.local/
+.local/
