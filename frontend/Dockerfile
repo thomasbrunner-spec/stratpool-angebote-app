@@ -8,11 +8,14 @@ RUN apk add --no-cache libc6-compat
 # pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# .npmrc has the @thomasbrunner-spec scope. Token is supplied as build secret.
+# .npmrc has the @thomasbrunner-spec scope. Token is supplied as a build arg.
+# (Coolify can't bind-mount file-based compose secrets, so we accept the token
+# as a build arg here. It is only present in this RUN layer and removed
+# afterwards; the runner stage doesn't carry it.)
+ARG GITHUB_PACKAGES_TOKEN
 COPY .npmrc package.json pnpm-lock.yaml ./
 
-RUN --mount=type=secret,id=npm_token \
-    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/npm_token)" >> .npmrc && \
+RUN echo "//npm.pkg.github.com/:_authToken=${GITHUB_PACKAGES_TOKEN}" >> .npmrc && \
     pnpm install --frozen-lockfile && \
     rm -f .npmrc
 
