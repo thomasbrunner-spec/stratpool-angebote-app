@@ -25,6 +25,14 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Next.js inlines NEXT_PUBLIC_* at build time (prerender / static export),
+# so the Supabase config must be passed as build args, not just runtime env.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 RUN pnpm run build
 
 # Runner
