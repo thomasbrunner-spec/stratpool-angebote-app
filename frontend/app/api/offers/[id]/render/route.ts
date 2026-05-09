@@ -6,18 +6,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiCall } from "@/lib/api";
 import type { OfferRenderResponse } from "@/lib/types/offer";
 
-// Render can take a few seconds for the first PPT generation.
-export const maxDuration = 60;
+// Anthropic skill + code-execution rendering routinely takes 2–5 minutes.
+// The Vercel/Coolify edge limit is 10 minutes; we leave headroom.
+export const maxDuration = 600;
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(_request: NextRequest, context: RouteContext) {
+export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
+  const format = request.nextUrl.searchParams.get("format") ?? "pptx";
   try {
     const data = await apiCall<OfferRenderResponse>(
-      `/api/v1/offers/${id}/render`,
+      `/api/v1/offers/${id}/render?format=${encodeURIComponent(format)}`,
       { method: "POST" }
     );
     return NextResponse.json(data);

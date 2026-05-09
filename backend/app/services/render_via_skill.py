@@ -1,17 +1,20 @@
-"""Render an offer to .pptx via the Anthropic skills + code-execution pipeline.
+"""Render an offer to .pptx or .docx via the Anthropic skills + code-execution pipeline.
 
-Replaces the python-pptx-in-Backend approach. Claude:
-  1. loads our custom era-presentation skill (CI rules + template)
-  2. loads the built-in `pptx` skill (python-pptx environment)
-  3. is shown the few-shot reference decks via container_upload blocks
-  4. composes a deck with python-pptx in the sandbox
-  5. writes a .pptx file we then download via the Files API
+Claude:
+  1. loads our custom era-presentation or era-word skill (CI rules + assets)
+  2. loads the matching Anthropic built-in skill (`pptx` or `docx`) for runtime
+  3. is optionally shown few-shot reference decks via container_upload blocks
+  4. composes the document in the sandbox with python-pptx / python-docx
+  5. writes the file we then download via the Files API (delta walk)
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
+from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 import anthropic
 from loguru import logger
@@ -24,13 +27,48 @@ settings = get_settings()
 _BETAS = ["skills-2025-10-02", "code-execution-2025-05-22", "files-api-2025-04-14"]
 _MAX_TOKENS = 16384
 
+RenderFormat = Literal["pptx", "word"]
+
 
 class RenderError(RuntimeError):
     pass
 
 
+@dataclass
+class _FormatSpec:
+    """Per-format wiring: which skill, which suffix, which file extension to look for."""
+
+    builtin_skill_id: str
+    custom_skill_setting_attr: str
+    output_filename: str
+    output_extension: str
+    output_mime_marker: str  # substring expected in mime_type
+    pptx_or_docx_label: str  # for prompts
+
+
+_FORMATS: dict[RenderFormat, _FormatSpec] = {
+    "pptx": _FormatSpec(
+        builtin_skill_id="pptx",
+        custom_skill_setting_attr="era_presentation_skill_id",
+        output_filename="angebot.pptx",
+        output_extension=".pptx",
+        output_mime_marker="zip",  # pptx is a zip
+        pptx_or_docx_label=".pptx-Präsentation",
+    ),
+    "word": _FormatSpec(
+        builtin_skill_id="docx",
+        custom_skill_setting_attr="era_word_skill_id",
+        output_filename="angebot.docx",
+        output_extension=".docx",
+        output_mime_marker="zip",  # docx is a zip too (OOXML)
+        pptx_or_docx_label=".docx-Word-Dokument",
+    ),
+}
+
+
 def _build_user_message(
     *,
+    fmt: RenderFormat,
     transcript: str,
     user_notes: str | None,
     client_name: str,
@@ -43,7 +81,7 @@ def _build_user_message(
     """Compose the multipart user message for the rendering request."""
     parts: list[dict] = []
 
-    # 1. The reference decks — Claude sees them as containers it can open.
+    # 1. The reference decks/docs — Claude sees them as containers it can open.
     for fid in few_shot_file_ids:
         parts.append({"type": "container_upload", "file_id": fid})
 
@@ -51,7 +89,7 @@ def _build_user_message(
     co_block = ""
     if co_consultant is not None:
         co_block = (
-            f"\n## Co-Berater (Layout-Block links unten)\n"
+            f"\n## Co-Berater\n"
             f"- Name: {co_consultant.name}\n"
             f"- Titel: {co_consultant.titel or '(nicht angegeben)'}\n"
             f"- Tel: {co_consultant.tel or '(nicht angegeben)'}\n"
@@ -61,9 +99,12 @@ def _build_user_message(
     price_line = f"- Investition (EUR, exkl. MwSt.): {price_eur}\n" if price_eur else ""
     notes_line = f"- Anmerkungen vom Berater: {user_notes}\n" if user_notes else ""
 
-    text = f"""Erstelle eine ERA-Group-Projektskizze als .pptx für das folgende Mandat. Nutze den era-presentation Skill für die ERA-CI und die hochgeladenen Referenz-Decks als stilistische Vorlage (Folien-Anzahl, Layout-Mix, Tonfall).
+    spec = _FORMATS[fmt]
+    skill_name = "era-presentation" if fmt == "pptx" else "era-word"
 
-## Hauptberater (Overlay-Box rechts unten — siehe Skill-Sektion "Zwei Berater auf der Titelfolie")
+    text = f"""Erstelle ein {spec.pptx_or_docx_label} für das folgende ERA-Group-Beratungsmandat. Nutze den {skill_name}-Skill für die ERA-CI.
+
+## Hauptberater
 - Name: {settings.berater_name}
 - Titel: {settings.berater_titel}
 - Tel: {settings.berater_tel}
@@ -79,12 +120,11 @@ def _build_user_message(
 {transcript}
 
 ## Anweisungen
-- Folge der ERA-CI strikt (Trebuchet MS, Farben, Footer/Logo aus Master).
-- Cover-Folie mit beiden Beratern wie im Skill beschrieben.
-- Nutze die hochgeladenen Referenz-Decks als Vorlage für Stil und Folien-Aufbau, NICHT 1:1 kopieren — Inhalt muss zum vorliegenden Mandat passen.
-- Body-Text in Content-Folien standardmäßig regular (nicht fett).
-- Schreibe das Deck nach `/home/claude/angebot.pptx` und führe die QA-Schritte aus dem Skill aus.
-- Antworte am Ende mit dem absoluten Pfad zum fertigen .pptx und einer 1-Satz-Zusammenfassung."""
+- Folge der ERA-CI strikt (Schriften, Farben, Logo, Header/Footer wo vorgesehen).
+- Inhalt muss zum vorliegenden Mandat passen — nicht generisch.
+- Body-Text in normaler Schrift (regular), nicht fett (außer für Headlines/Hervorhebungen).
+- Schreibe das Ergebnis nach `/home/claude/{spec.output_filename}` und führe die im Skill beschriebenen QA-Schritte aus.
+- Antworte am Ende mit dem absoluten Pfad zur fertigen Datei und einer 1-Satz-Zusammenfassung."""
 
     # Mark the text block as the cache breakpoint. Anthropic caches everything
     # *up to* this block — i.e. every container_upload (the few-shot decks)
@@ -100,13 +140,9 @@ def _build_user_message(
     return parts
 
 
-def _extract_pptx_file_id(response) -> str | None:
-    """Walk every tool result, return the first file_id whose downloaded bytes are a zip."""
-    return None  # actual download happens in render_offer_via_skill below
-
-
 async def render_offer_via_skill(
     *,
+    fmt: RenderFormat,
     transcript: str,
     user_notes: str | None,
     client_name: str,
@@ -115,17 +151,21 @@ async def render_offer_via_skill(
     price_eur: Decimal | None,
     co_consultant: Consultant | None,
 ) -> bytes:
-    """Trigger Claude to compose and render the offer; return the pptx bytes."""
-    if not settings.era_presentation_skill_id:
-        raise RenderError("ERA_PRESENTATION_SKILL_ID is not configured")
-    # Few-shot decks are optional. They make outputs more on-style, but each
-    # one balloons the input by hundreds of thousands of tokens — keep them
-    # off until prompt-caching is wired up.
-    few_shots = settings.few_shot_file_id_list
+    """Trigger Claude to compose and render the offer; return the file bytes."""
+    if fmt not in _FORMATS:
+        raise RenderError(f"Unknown format {fmt!r}")
+    spec = _FORMATS[fmt]
+    custom_skill_id = getattr(settings, spec.custom_skill_setting_attr)
+    if not custom_skill_id:
+        raise RenderError(
+            f"{spec.custom_skill_setting_attr.upper()} is not configured for {fmt!r}"
+        )
+    few_shots = settings.few_shot_file_id_list  # off by default; pool today is PPT-only
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     user_content = _build_user_message(
+        fmt=fmt,
         transcript=transcript,
         user_notes=user_notes,
         client_name=client_name,
@@ -133,32 +173,31 @@ async def render_offer_via_skill(
         consulting_type=consulting_type,
         price_eur=price_eur,
         co_consultant=co_consultant,
-        few_shot_file_ids=few_shots,
+        few_shot_file_ids=few_shots if fmt == "pptx" else [],
     )
 
     t0 = time.time()
     logger.info(
-        f"[render_via_skill] starting render for client={client_name!r} "
-        f"few_shots={len(few_shots)} co_consultant={co_consultant is not None}"
+        f"[render_via_skill] starting fmt={fmt} client={client_name!r} "
+        f"few_shots={len(few_shots) if fmt == 'pptx' else 0} "
+        f"co_consultant={co_consultant is not None}"
     )
 
     # Snapshot existing file_ids so we can spot new ones the model creates.
-    # Anthropic's tool-result block walking is brittle (the file id surface
-    # depends on which sub-tool — bash / text_editor / code_execution — wrote
-    # the file), so we use the Files API as a robust fallback.
-    pre_files = {f.id for f in (await client.beta.files.list(limit=100, betas=["files-api-2025-04-14"])).data}
+    pre_files = {
+        f.id
+        for f in (
+            await client.beta.files.list(limit=100, betas=["files-api-2025-04-14"])
+        ).data
+    }
 
     response = await client.beta.messages.create(
         model=settings.render_model,
         max_tokens=_MAX_TOKENS,
         container={
             "skills": [
-                {"skill_id": "pptx", "type": "anthropic", "version": "latest"},
-                {
-                    "skill_id": settings.era_presentation_skill_id,
-                    "type": "custom",
-                    "version": "latest",
-                },
+                {"skill_id": spec.builtin_skill_id, "type": "anthropic", "version": "latest"},
+                {"skill_id": custom_skill_id, "type": "custom", "version": "latest"},
             ],
         },
         tools=[{"type": "code_execution_20260120", "name": "code_execution"}],
@@ -166,27 +205,53 @@ async def render_offer_via_skill(
         betas=_BETAS,
     )
     logger.info(
-        f"[render_via_skill] response in {time.time() - t0:.1f}s — "
+        f"[render_via_skill] fmt={fmt} response in {time.time() - t0:.1f}s — "
         f"stop_reason={response.stop_reason} "
         f"tokens=in:{response.usage.input_tokens}/out:{response.usage.output_tokens}"
     )
 
-    # Pick the .pptx via the Files-API delta. Robust across all sub-tool variants
-    # (bash / text_editor / code_execution) — we just look for new zip files.
-    post = (
-        await client.beta.files.list(limit=100, betas=["files-api-2025-04-14"])
-    ).data
-    new_files = [f for f in post if f.id not in pre_files]
-    # Newest first, prefer .pptx then any zip
-    new_files.sort(key=lambda f: f.created_at, reverse=True)
+    # Pick the produced file via the Files-API delta — robust across sub-tool variants.
+    # Files can be registered slightly *after* messages.create returns (especially
+    # for docx via Anthropic's `cp` to $OUTPUT_DIR pattern), so retry the listing
+    # for up to ~30s with a backoff.
+    new_files: list = []
+    for attempt in range(6):
+        post = (
+            await client.beta.files.list(limit=100, betas=["files-api-2025-04-14"])
+        ).data
+        new_files = [f for f in post if f.id not in pre_files]
+        new_files.sort(key=lambda f: f.created_at, reverse=True)
+        if any(
+            (f.filename or "").lower().endswith(spec.output_extension)
+            for f in new_files
+        ):
+            break
+        if attempt < 5:
+            logger.info(
+                f"[render_via_skill] no {spec.output_extension} yet "
+                f"(attempt {attempt + 1}/6), retrying in 5s…"
+            )
+            await asyncio.sleep(5)
+
     for f in new_files:
-        if not (f.filename or "").lower().endswith(".pptx") and "zip" not in (f.mime_type or ""):
+        filename = (f.filename or "").lower()
+        mime = (f.mime_type or "")
+        if not (filename.endswith(spec.output_extension) or spec.output_mime_marker in mime):
             continue
+        if not filename.endswith(spec.output_extension) and not filename.endswith(".pptx"):
+            # extra guard: docx and pptx both report mime=zip; require correct extension
+            if spec.output_extension == ".docx" and not filename.endswith(".docx"):
+                continue
         response_obj = await client.beta.files.download(
             f.id, betas=["files-api-2025-04-14"]
         )
         data = await response_obj.read()
         if data[:2] != b"PK":
+            continue
+        # For docx we additionally check that the OOXML content-type marker is present
+        if fmt == "word" and not filename.endswith(".docx"):
+            continue
+        if fmt == "pptx" and not filename.endswith(".pptx"):
             continue
         logger.info(
             f"[render_via_skill] picked {f.filename!r} ({f.id}, {len(data):,} B)"
@@ -194,6 +259,6 @@ async def render_offer_via_skill(
         return data
 
     raise RenderError(
-        f"No .pptx file was produced. stop_reason={response.stop_reason} "
+        f"No {spec.output_extension} file was produced. stop_reason={response.stop_reason} "
         f"new_files={len(new_files)}"
     )

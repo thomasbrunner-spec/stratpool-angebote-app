@@ -1,18 +1,21 @@
-"""Upload the era-presentation skill to Anthropic and print the skill_id.
-
-Run once (or after the skill content changes). The resulting skill_id should
-be saved as ERA_PRESENTATION_SKILL_ID in .env so the generation pipeline can
-reference it.
+"""Upload era-* skills to Anthropic.
 
 Usage:
     cd backend
-    uv run python -m scripts.upload_skill
+    uv run python -m scripts.upload_skill                # uploads era-presentation
+    uv run python -m scripts.upload_skill era-word       # uploads era-word
+    uv run python -m scripts.upload_skill all            # uploads both
+
+If the matching env var (ERA_PRESENTATION_SKILL_ID / ERA_WORD_SKILL_ID) is set,
+a new VERSION of the existing skill is created. Otherwise a fresh skill is
+created and the script prints the line you need to paste into both .env files.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import anthropic
@@ -21,62 +24,109 @@ from app.config import get_settings
 
 settings = get_settings()
 
-# Skill source: the in-repo skill (we evolve it independently of the
-# claude.ai mirror). On first upload Anthropic returns a fresh skill_id.
-_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "era-presentation"
-_SKILL_MD = _SKILL_DIR / "SKILL.md"
-_TEMPLATE = _SKILL_DIR / "assets" / "ERA_Template.pptx"
-
+_SKILLS_ROOT = Path(__file__).resolve().parent.parent / "skills"
 _PPTX_MIME = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 )
 
 
-def main() -> None:
-    if not _SKILL_MD.exists():
-        sys.exit(f"SKILL.md not found at {_SKILL_MD}")
-    if not _TEMPLATE.exists():
-        sys.exit(f"ERA_Template.pptx not found at {_TEMPLATE}")
+@dataclass
+class SkillSpec:
+    """Describes one local skill bundle and how to upload it."""
+
+    name: str  # directory name under backend/skills/, also the prefix used by Anthropic
+    display_title: str
+    env_var: str
+    files: list[tuple[str, str]]  # (relative path inside skill dir, mime type)
+
+
+_SPECS: dict[str, SkillSpec] = {
+    "era-presentation": SkillSpec(
+        name="era-presentation",
+        display_title="ERA Group Präsentation",
+        env_var="ERA_PRESENTATION_SKILL_ID",
+        files=[
+            ("SKILL.md", "text/markdown"),
+            ("assets/ERA_Template.pptx", _PPTX_MIME),
+        ],
+    ),
+    "era-word": SkillSpec(
+        name="era-word",
+        display_title="ERA Group Word",
+        env_var="ERA_WORD_SKILL_ID",
+        files=[
+            ("SKILL.md", "text/markdown"),
+            ("assets/era_logo.png", "image/png"),
+        ],
+    ),
+}
+
+
+def _upload(spec: SkillSpec) -> None:
+    skill_dir = _SKILLS_ROOT / spec.name
+    if not skill_dir.is_dir():
+        sys.exit(f"Skill directory not found: {skill_dir}")
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    existing_id = os.environ.get(spec.env_var)
 
-    existing_id = os.environ.get("ERA_PRESENTATION_SKILL_ID")
-    print(f"SKILL.md: {_SKILL_MD.stat().st_size:,} B")
-    print(f"Template: {_TEMPLATE.stat().st_size:,} B")
-    print(f"Existing ERA_PRESENTATION_SKILL_ID: {existing_id or '(none)'}")
-    print()
+    print(f"=== {spec.name} ===")
+    print(f"  display_title: {spec.display_title!r}")
+    print(f"  Existing {spec.env_var}: {existing_id or '(none)'}")
 
-    # All files must live in a single top-level folder; SKILL.md must be at
-    # the root of that folder. Anthropic enforces this strictly.
-    with open(_SKILL_MD, "rb") as md, open(_TEMPLATE, "rb") as tmpl:
-        files = [
-            ("era-presentation/SKILL.md", md, "text/markdown"),
-            ("era-presentation/assets/ERA_Template.pptx", tmpl, _PPTX_MIME),
-        ]
+    # Open files; remember to close them after the API call.
+    open_files = []
+    try:
+        api_files: list[tuple[str, object, str]] = []
+        for rel, mime in spec.files:
+            local_path = skill_dir / rel
+            if not local_path.exists():
+                sys.exit(f"Missing file: {local_path}")
+            f = open(local_path, "rb")
+            open_files.append(f)
+            print(f"  → {rel}: {local_path.stat().st_size:,} B")
+            api_files.append((f"{spec.name}/{rel}", f, mime))
+
         if existing_id:
-            print(f"Creating new VERSION of {existing_id}...")
+            print(f"  Creating new version of {existing_id}…")
             version = client.beta.skills.versions.create(
-                existing_id,
-                files=files,
-                betas=["skills-2025-10-02"],
+                existing_id, files=api_files, betas=["skills-2025-10-02"]
             )
-            print(f"\nNew version created.")
-            print(f"  skill_id: {existing_id}  (unchanged)")
-            print(f"  version:  {version.version}")
-            print(f"  Container can keep using version='latest'.")
+            print(f"  ✓ new version: {version.version}")
         else:
-            print("No existing skill_id — creating a fresh skill...")
+            print("  No existing skill_id — creating fresh skill…")
             skill = client.beta.skills.create(
-                display_title="ERA Group Präsentation",
-                files=files,
+                display_title=spec.display_title,
+                files=api_files,
                 betas=["skills-2025-10-02"],
             )
-            print(f"\nSkill created.")
-            print(f"  id:             {skill.id}")
-            print(f"  latest_version: {skill.latest_version!r}")
+            print(f"  ✓ skill_id: {skill.id}")
             print()
-            print(f"Add this to backend/.env and the root .env:")
-            print(f"  ERA_PRESENTATION_SKILL_ID={skill.id}")
+            print("  Add this to backend/.env and the root .env:")
+            print(f"    {spec.env_var}={skill.id}")
+    finally:
+        for f in open_files:
+            f.close()
+
+
+def main() -> None:
+    args = sys.argv[1:]
+    if not args:
+        target = "era-presentation"
+    elif args[0] == "all":
+        target = "all"
+    else:
+        target = args[0]
+
+    if target == "all":
+        for name in _SPECS:
+            _upload(_SPECS[name])
+            print()
+        return
+
+    if target not in _SPECS:
+        sys.exit(f"Unknown skill {target!r}. Choose from: {', '.join(_SPECS)} | all")
+    _upload(_SPECS[target])
 
 
 if __name__ == "__main__":

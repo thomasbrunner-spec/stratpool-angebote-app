@@ -35,6 +35,7 @@ services:
       BERATER_EMAIL: ${BERATER_EMAIL:-tbrunner@eragroup.com}
       RENDER_STORAGE_BUCKET: ${RENDER_STORAGE_BUCKET:-offer-renders}
       ERA_PRESENTATION_SKILL_ID: ${ERA_PRESENTATION_SKILL_ID:-}
+      ERA_WORD_SKILL_ID: ${ERA_WORD_SKILL_ID:-}
       FEW_SHOT_FILE_IDS: ${FEW_SHOT_FILE_IDS:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/').read()"]

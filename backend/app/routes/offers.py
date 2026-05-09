@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,9 +190,11 @@ async def update_offer_status(
     return await _load_detail(session, offer_id)
 
 
-_PPTX_MIME = (
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-)
+_FORMAT_MIME = {
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "word": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+_FORMAT_SUFFIX = {"pptx": "pptx", "word": "docx"}
 _SIGNED_URL_TTL_SECONDS = 3600
 
 
@@ -207,11 +209,14 @@ async def render_offer_endpoint(
     offer_id: uuid.UUID,
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_db)],
+    format: Annotated[
+        str, Query(pattern="^(pptx|word)$", description="Render target format")
+    ] = "pptx",
 ) -> OfferRenderResponse:
-    """Render the offer's latest version to PPT (and later Word).
+    """Render the offer's latest version to PPT or Word.
 
-    Cached: if the version already has a stored artifact, the bytes are not
-    re-generated — only a fresh signed URL is returned.
+    Cached: each format is generated once per version and stored in Supabase.
+    Subsequent calls reuse the cached file and only refresh the signed URL.
     """
     offer = await session.get(
         Offer,
@@ -228,9 +233,14 @@ async def render_offer_endpoint(
     if not _is_user_content(latest.content_json):
         raise HTTPException(status_code=410, detail="Legacy pool entry is not renderable")
 
-    if not latest.pptx_path:
+    # Select the cached path attribute and per-format MIME.
+    path_attr = "pptx_path" if format == "pptx" else "word_path"
+    cached = getattr(latest, path_attr)
+
+    if not cached:
         try:
             payload = await render_offer_via_skill(
+                fmt=format,  # type: ignore[arg-type]
                 transcript=latest.transcript or "",
                 user_notes=latest.user_notes,
                 client_name=offer.client_name,
@@ -240,21 +250,28 @@ async def render_offer_endpoint(
                 co_consultant=offer.co_consultant,
             )
         except RenderError as exc:
-            logger.exception("skill-render failed (configuration / output)")
+            logger.exception(f"skill-render failed (format={format})")
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
-            logger.exception("skill-render unexpected error")
+            logger.exception(f"skill-render unexpected error (format={format})")
             raise HTTPException(status_code=500, detail=f"Render failed: {exc}") from exc
-        storage_path = render_path(str(offer_id), latest.version_number, "pptx")
-        await upload_render(storage_path, payload, _PPTX_MIME)
-        latest.pptx_path = storage_path
+        storage_path = render_path(
+            str(offer_id), latest.version_number, _FORMAT_SUFFIX[format]
+        )
+        await upload_render(storage_path, payload, _FORMAT_MIME[format])
+        setattr(latest, path_attr, storage_path)
         await session.commit()
 
-    pptx_url = await signed_url(latest.pptx_path, expires_in=_SIGNED_URL_TTL_SECONDS)
-
-    word_url = None
-    if latest.word_path:
-        word_url = await signed_url(latest.word_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+    pptx_url = (
+        await signed_url(latest.pptx_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+        if latest.pptx_path
+        else None
+    )
+    word_url = (
+        await signed_url(latest.word_path, expires_in=_SIGNED_URL_TTL_SECONDS)
+        if latest.word_path
+        else None
+    )
 
     return OfferRenderResponse(
         offer_id=offer.id,

@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     # Anthropic Skills + few-shot pool (Code-Execution rendering)
     era_presentation_skill_id: str = ""
+    era_word_skill_id: str = ""
     few_shot_file_ids: str = ""
 
     @property

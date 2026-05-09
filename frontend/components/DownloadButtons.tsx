@@ -8,13 +8,9 @@ type Format = "pptx" | "word";
 
 interface DownloadButtonsProps {
   offerId: string;
-  hasWordRenderer?: boolean;
 }
 
-export function DownloadButtons({
-  offerId,
-  hasWordRenderer = false,
-}: DownloadButtonsProps) {
+export function DownloadButtons({ offerId }: DownloadButtonsProps) {
   const [pending, setPending] = useState<Format | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,9 +18,10 @@ export function DownloadButtons({
     setPending(format);
     setError(null);
     try {
-      const response = await fetch(`/api/offers/${offerId}/render`, {
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/offers/${offerId}/render?format=${format}`,
+        { method: "POST" }
+      );
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error ?? `Render failed: ${response.status}`);
@@ -32,11 +29,7 @@ export function DownloadButtons({
       const data: OfferRenderResponse = await response.json();
       const url = format === "pptx" ? data.pptx_url : data.word_url;
       if (!url) {
-        throw new Error(
-          format === "word"
-            ? "Word-Renderer noch nicht verfügbar."
-            : "PPT-URL fehlt."
-        );
+        throw new Error(`${format.toUpperCase()}-URL fehlt in der Antwort.`);
       }
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
@@ -56,16 +49,18 @@ export function DownloadButtons({
         >
           {pending === "pptx" ? "Rendere…" : "PowerPoint herunterladen"}
         </Button>
-        {hasWordRenderer && (
-          <Button
-            variant="secondary"
-            onClick={() => triggerDownload("word")}
-            disabled={pending !== null}
-          >
-            {pending === "word" ? "Rendere…" : "Word herunterladen"}
-          </Button>
-        )}
+        <Button
+          variant="secondary"
+          onClick={() => triggerDownload("word")}
+          disabled={pending !== null}
+        >
+          {pending === "word" ? "Rendere…" : "Word herunterladen"}
+        </Button>
       </div>
+      <p className="text-xs text-text-muted">
+        Erstmaliger Render dauert 2–5 Minuten (Anthropic Code-Execution).
+        Folge-Aufrufe sind aus dem Cache und sofort.
+      </p>
       {error && (
         <p className="text-xs text-danger" role="alert">
           {error}
