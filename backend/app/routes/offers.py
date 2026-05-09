@@ -31,6 +31,13 @@ router = APIRouter(prefix="/offers", tags=["offers"])
 # Seed offers + early drafts have user_id=NULL because auth.users was empty
 # at seed time. Switch to per-user filtering once we onboard a second berater.
 
+# Legacy-pool guard: seed offers are stored as raw markdown
+# (`content_json = {"format": "legacy_markdown", "markdown": "..."}`) and
+# exist only as few-shot material. They must not appear as user-facing offers
+# because they don't conform to OfferContent.
+def _is_user_content(content_json: dict) -> bool:
+    return isinstance(content_json, dict) and "angebot_titel" in content_json
+
 
 @router.post(
     "/generate",
@@ -80,10 +87,11 @@ async def list_offers(
 
     items: list[OfferListItem] = []
     for offer in offers:
-        latest = max(
-            (v.version_number for v in offer.versions),
-            default=0,
-        )
+        if not offer.versions:
+            continue
+        latest_version = max(offer.versions, key=lambda v: v.version_number)
+        if not _is_user_content(latest_version.content_json):
+            continue
         items.append(
             OfferListItem(
                 id=offer.id,
@@ -93,7 +101,7 @@ async def list_offers(
                 status=offer.status,  # type: ignore[arg-type]
                 price_eur=offer.price_eur,
                 created_at=offer.created_at,
-                latest_version_number=latest,
+                latest_version_number=latest_version.version_number,
             )
         )
     return items
@@ -101,8 +109,14 @@ async def list_offers(
 
 async def _load_detail(session: AsyncSession, offer_id: uuid.UUID) -> OfferDetail:
     """Fetch an offer with its latest version, raise 404 if missing."""
+    # populate_existing=True ensures eager-loading runs even if the offer is
+    # already in the session's identity map (e.g. after a status PATCH),
+    # which would otherwise leave .versions as a lazy-load proxy.
     offer = await session.get(
-        Offer, offer_id, options=[selectinload(Offer.versions)]
+        Offer,
+        offer_id,
+        options=[selectinload(Offer.versions)],
+        populate_existing=True,
     )
     if offer is None:
         raise HTTPException(
@@ -116,6 +130,14 @@ async def _load_detail(session: AsyncSession, offer_id: uuid.UUID) -> OfferDetai
         )
 
     latest = max(offer.versions, key=lambda v: v.version_number)
+    if not _is_user_content(latest.content_json):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=(
+                f"Offer {offer_id} is in legacy few-shot-pool format and not "
+                "renderable as user content"
+            ),
+        )
     content = OfferContent.model_validate(latest.content_json)
 
     return OfferDetail(

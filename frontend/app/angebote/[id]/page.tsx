@@ -53,7 +53,8 @@ export default async function AngebotDetailPage({ params }: PageProps) {
     offer = await apiCall<OfferDetail>(`/api/v1/offers/${id}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    if (message.includes("404")) {
+    // 410 = legacy few-shot-pool entry, not user-facing content.
+    if (message.includes("404") || message.includes("410")) {
       notFound();
     }
     throw err;
