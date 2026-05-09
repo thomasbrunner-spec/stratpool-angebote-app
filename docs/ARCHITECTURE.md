@@ -1,6 +1,6 @@
 # Architecture
 
-Tech-Stack-Entscheidungen für Apps in der StratPool-Plattform.
+Tech-Stack-Entscheidungen für Apps in der Stratpool-Plattform.
 
 ## Stack-Übersicht
 

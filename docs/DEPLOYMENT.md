@@ -1,6 +1,6 @@
 # Deployment auf Coolify
 
-Schritt-für-Schritt-Anleitung, um eine StratPool-App auf deinem Coolify-Server zu deployen.
+Schritt-für-Schritt-Anleitung, um eine Stratpool-App auf deinem Coolify-Server zu deployen.
 
 ## Voraussetzungen
 
@@ -90,7 +90,7 @@ curl https://<app-name>.stratpool.pro/api/v1/health/full
 ```
 
 Im Browser:
-- Landing Page erscheint mit StratPool-Logo
+- Landing Page erscheint mit Stratpool-Logo
 - Login funktioniert
 - Dashboard zeigt User-Info
 - "Generate haiku" liefert ein Haiku → Pipeline funktioniert

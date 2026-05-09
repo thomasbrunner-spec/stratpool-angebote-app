@@ -8,13 +8,13 @@
 **Zweck:** AI-gestützter Generator für ERA-Group-Angebote — Discovery-Call-Transkript + Preis + Anmerkungen → Few-Shot-Retrieval aus Bestandsangeboten → Anthropic Claude → strukturiertes Angebots-JSON → Word/PowerPoint-Render im ERA-CI.
 **Repo:** `thomasbrunner-spec/stratpool-angebote-app`
 **Subdomain:** `angebote.stratpool.pro`
-**Status:** In Entwicklung (Etappe 2 der StratPool-Plattform)
+**Status:** In Entwicklung (Etappe 2 der Stratpool-Plattform)
 
 ## Architektur
 
 Standard-Monorepo aus dem `stratpool-app-template`. Backend in `backend/` (FastAPI), Frontend in `frontend/` (Next.js 15). Beide laufen lokal via Docker Compose, deployt via Coolify.
 
-**App-Branding:** StratPool (Dark Mode, Plus Jakarta Sans, Signal Blue).
+**App-Branding:** Stratpool (Dark Mode, Plus Jakarta Sans, Signal Blue).
 **Output-Branding:** ERA Group (Word/PowerPoint im ERA-CI über die `era-word`- und `era-presentation`-Skills).
 Diese Trennung ist Architektur, nicht Detail.
 

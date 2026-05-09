@@ -14,4 +14,4 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Health Check Endpoints (DB, Anthropic, Voyage, Full)
 - Docker Compose Setup für Coolify
 - GitHub Actions: CI + Release Please
-- StratPool Design System integriert
+- Stratpool Design System integriert

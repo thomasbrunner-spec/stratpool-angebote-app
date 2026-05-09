@@ -1,5 +1,5 @@
 # ===================================================================
-# StratPool App Template – Docker Compose
+# Stratpool App Template – Docker Compose
 # ===================================================================
 # Local dev: docker compose up
 # Coolify:   set this file as the deployment compose. Coolify reads

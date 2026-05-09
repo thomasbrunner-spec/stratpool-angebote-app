@@ -1,6 +1,6 @@
-# StratPool App Template
+# Stratpool App Template
 
-> 🚀 GitHub Template Repository für neue Apps in der StratPool-Plattform
+> 🚀 GitHub Template Repository für neue Apps in der Stratpool-Plattform
 
 Dieses Template enthält alles, was du brauchst, um eine neue App zu starten:
 - ✅ FastAPI Backend (Python 3.12 + uv + Ruff)
@@ -74,7 +74,7 @@ pnpm dev
 
 ### 5. Verifikation
 
-- Öffne http://localhost:3000 → Landing Page mit StratPool-Logo
+- Öffne http://localhost:3000 → Landing Page mit Stratpool-Logo
 - Klick "Sign in" → Login-Seite
 - Login mit Supabase-Credentials → Dashboard
 - Klick "Generate haiku" → wenn ein Haiku erscheint, läuft die ganze Pipeline:

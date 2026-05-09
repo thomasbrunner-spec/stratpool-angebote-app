@@ -61,7 +61,7 @@ export default async function DashboardPage() {
               <Badge variant="success">CONNECTED</Badge>
             </div>
             <Card.Description>
-              Your app is connected to Supabase auth and the StratPool design system.
+              Your app is connected to Supabase auth and the Stratpool design system.
             </Card.Description>
           </Card.Header>
           <Card.Content className="grid grid-cols-2 gap-4 text-sm">

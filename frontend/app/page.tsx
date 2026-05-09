@@ -10,12 +10,12 @@ export default function LandingPage() {
         <Badge variant="signal">TEMPLATE</Badge>
 
         <h1 className="font-display text-4xl md:text-5xl font-semibold tracking-tight">
-          Welcome to StratPool
+          Welcome to Stratpool
         </h1>
 
         <p className="text-text-dim text-lg leading-relaxed max-w-lg">
           This is the app template. Once cloned and configured, it becomes
-          a real app on the StratPool platform.
+          a real app on the Stratpool platform.
         </p>
 
         <div className="flex gap-3 mt-4">

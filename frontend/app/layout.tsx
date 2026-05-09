@@ -15,7 +15,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StratPool Angebote",
+  title: "Stratpool Angebote",
   description: "AI-gestützter Angebots-Generator für die ERA Group",
   icons: {
     icon: "/favicon.svg",

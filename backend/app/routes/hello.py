@@ -18,7 +18,7 @@ class HelloResponse(BaseModel):
 @router.get("/", response_model=HelloResponse)
 async def hello_public() -> HelloResponse:
     """Public hello — no auth required."""
-    return HelloResponse(message="Hello from StratPool!")
+    return HelloResponse(message="Hello from Stratpool!")
 
 
 @router.get("/me", response_model=HelloResponse)
@@ -29,7 +29,7 @@ async def hello_authenticated(user: CurrentUser) -> HelloResponse:
 
 
 class HaikuRequest(BaseModel):
-    topic: str = "the StratPool platform"
+    topic: str = "the Stratpool platform"
 
 
 class HaikuResponse(BaseModel):

@@ -14,7 +14,7 @@ interface HaikuResponse {
 }
 
 export function HelloHaikuDemo() {
-  const [topic, setTopic] = useState("the StratPool platform");
+  const [topic, setTopic] = useState("the Stratpool platform");
   const [haiku, setHaiku] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
