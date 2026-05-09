@@ -1,4 +1,4 @@
-"""Offer endpoints — generation, listing, and version retrieval."""
+"""Offer endpoints — generation, listing, detail, and status updates."""
 
 from __future__ import annotations
 
@@ -7,14 +7,29 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.schemas.offer import OfferGenerateRequest, OfferGenerateResponse
+from app.models import Offer
+from app.schemas.offer import (
+    OfferContent,
+    OfferDetail,
+    OfferGenerateRequest,
+    OfferGenerateResponse,
+    OfferListItem,
+    OfferStatusUpdate,
+)
 from app.services.auth import CurrentUser
 from app.services.offer_generator import generate_offer
 
 router = APIRouter(prefix="/offers", tags=["offers"])
+
+
+# Single-tenant assumption: every authenticated user sees every offer.
+# Seed offers + early drafts have user_id=NULL because auth.users was empty
+# at seed time. Switch to per-user filtering once we onboard a second berater.
 
 
 @router.post(
@@ -47,3 +62,102 @@ async def generate_offer_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Generation failed: {exc}",
         ) from exc
+
+
+@router.get("", response_model=list[OfferListItem])
+async def list_offers(
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> list[OfferListItem]:
+    """List all offers, newest first, with the latest version number per row."""
+    stmt = (
+        select(Offer)
+        .options(selectinload(Offer.versions))
+        .order_by(Offer.created_at.desc())
+    )
+    result = await session.execute(stmt)
+    offers = result.scalars().all()
+
+    items: list[OfferListItem] = []
+    for offer in offers:
+        latest = max(
+            (v.version_number for v in offer.versions),
+            default=0,
+        )
+        items.append(
+            OfferListItem(
+                id=offer.id,
+                client_name=offer.client_name,
+                industry=offer.industry,
+                consulting_type=offer.consulting_type,  # type: ignore[arg-type]
+                status=offer.status,  # type: ignore[arg-type]
+                price_eur=offer.price_eur,
+                created_at=offer.created_at,
+                latest_version_number=latest,
+            )
+        )
+    return items
+
+
+async def _load_detail(session: AsyncSession, offer_id: uuid.UUID) -> OfferDetail:
+    """Fetch an offer with its latest version, raise 404 if missing."""
+    offer = await session.get(
+        Offer, offer_id, options=[selectinload(Offer.versions)]
+    )
+    if offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} not found",
+        )
+    if not offer.versions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Offer {offer_id} has no versions",
+        )
+
+    latest = max(offer.versions, key=lambda v: v.version_number)
+    content = OfferContent.model_validate(latest.content_json)
+
+    return OfferDetail(
+        id=offer.id,
+        client_name=offer.client_name,
+        industry=offer.industry,
+        consulting_type=offer.consulting_type,  # type: ignore[arg-type]
+        status=offer.status,  # type: ignore[arg-type]
+        price_eur=offer.price_eur,
+        created_at=offer.created_at,
+        updated_at=offer.updated_at,
+        version_id=latest.id,
+        version_number=latest.version_number,
+        version_created_at=latest.created_at,
+        content=content,
+    )
+
+
+@router.get("/{offer_id}", response_model=OfferDetail)
+async def get_offer(
+    offer_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferDetail:
+    """Return one offer with its latest version content."""
+    return await _load_detail(session, offer_id)
+
+
+@router.patch("/{offer_id}", response_model=OfferDetail)
+async def update_offer_status(
+    offer_id: uuid.UUID,
+    body: OfferStatusUpdate,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferDetail:
+    """Update the status of an offer (draft|sent|won|lost)."""
+    offer = await session.get(Offer, offer_id)
+    if offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} not found",
+        )
+    offer.status = body.status
+    await session.commit()
+    return await _load_detail(session, offer_id)

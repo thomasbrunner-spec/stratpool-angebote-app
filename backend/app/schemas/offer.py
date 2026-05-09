@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.models.offer import CONSULTING_TYPES
 
 ConsultingType = Literal["ki_strategie", "ai_design_sprint", "prozessberatung", "workshop"]
+OfferStatus = Literal["draft", "sent", "won", "lost"]
 # Sanity: keep the literal in lockstep with the ORM constraint values.
 assert set(CONSULTING_TYPES) == set(ConsultingType.__args__)  # type: ignore[attr-defined]
 
@@ -63,3 +64,39 @@ class OfferGenerateResponse(BaseModel):
         description="IDs of the Bestandsangebote used as few-shots, ordered by similarity"
     )
     created_at: datetime
+
+
+class OfferListItem(BaseModel):
+    """Row in the GET /offers list view."""
+
+    id: uuid.UUID
+    client_name: str
+    industry: str | None
+    consulting_type: ConsultingType
+    status: OfferStatus
+    price_eur: Decimal | None
+    created_at: datetime
+    latest_version_number: int
+
+
+class OfferDetail(BaseModel):
+    """Full offer + its latest version, returned by GET/PATCH /offers/{id}."""
+
+    id: uuid.UUID
+    client_name: str
+    industry: str | None
+    consulting_type: ConsultingType
+    status: OfferStatus
+    price_eur: Decimal | None
+    created_at: datetime
+    updated_at: datetime
+    version_id: uuid.UUID
+    version_number: int
+    version_created_at: datetime
+    content: OfferContent
+
+
+class OfferStatusUpdate(BaseModel):
+    """Body for PATCH /offers/{id}."""
+
+    status: OfferStatus

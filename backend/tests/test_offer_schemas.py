@@ -9,6 +9,7 @@ from app.schemas.offer import (
     OfferContent,
     OfferContentBestandteil,
     OfferGenerateRequest,
+    OfferStatusUpdate,
 )
 
 
@@ -113,3 +114,13 @@ def test_content_json_schema_has_anthropic_friendly_shape() -> None:
         "investition",
         "rahmenbedingungen",
     }
+
+
+def test_status_update_accepts_known_values() -> None:
+    for s in ("draft", "sent", "won", "lost"):
+        assert OfferStatusUpdate(status=s).status == s  # type: ignore[arg-type]
+
+
+def test_status_update_rejects_unknown_value() -> None:
+    with pytest.raises(ValidationError):
+        OfferStatusUpdate(status="archived")  # type: ignore[arg-type]
