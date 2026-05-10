@@ -259,14 +259,19 @@ async def _call_claude_for_offer(
     user_message: str,
 ) -> OfferContent:
     client = get_anthropic_client()
-    response = await client.messages.create(
+    # The Anthropic SDK requires streaming for any request whose worst-case
+    # latency exceeds 10 minutes (i.e. effectively whenever max_tokens is
+    # large). Use the streaming API and pull the final assembled message at
+    # the end — semantics-equivalent to the previous create() call.
+    async with client.messages.stream(
         model=settings.anthropic_model,
         max_tokens=MAX_OUTPUT_TOKENS,
         system=system_blocks,
         tools=[_build_offer_tool()],
         tool_choice={"type": "tool", "name": "submit_offer"},
         messages=[{"role": "user", "content": user_message}],
-    )
+    ) as stream:
+        response = await stream.get_final_message()
 
     if response.stop_reason == "max_tokens":
         raise RuntimeError(
