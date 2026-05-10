@@ -268,6 +268,14 @@ PPT-Optik geht in die richtige Richtung, aber noch nicht auf Saarpor-Niveau. Nä
 ### Plattform-Followups
 - Lokales Verzeichnis umbenennen: `mv ~/Desktop/Claude-Code/stratpoo-app-template ~/Desktop/Claude-Code/stratpool-app-template` (falls noch nicht).
 
+### Ideen aus dem Tagesabschluss (nicht eingeplant, aber durchgedacht)
+
+**Hedy.ai-Integration für Discovery-Transcripts.** Hedy hat eine REST-API; Plan wäre OAuth-Flow + Tokens in Supabase + zwei Backend-Endpoints (Sessions-Liste, Transcript-Body) + ein „Aus Hedy laden"-Button im `/angebote/neu`-Form. Optional die Hedy-Highlights und -ToDos in die User-Notes mappen. Spart die Copy-Paste-Akrobatik des 30k-Zeichen-Transkripts; klarer UX-Boost. Aufwand ~4–6 h.
+
+**Knowledge-Base-Upload-UI.** Die Engine steht — `knowledge_chunks` mit `source`-Feld, `seed_knowledge.py`-Logik. Was fehlt: ein Upload-Endpoint für weitere Wissensbausteine (Case Studies, Methoden-Sammlungen, Branchen-Insights), gleich gechunked + embedded + mit eigenem Source-Tag persistiert. Plus ein Verwaltungs-UI (aktive Sources, Chunk-Counts, löschen). Aufwand ~3–4 h. Effekt: jedes hochgeladene Stück verbessert alle zukünftigen Generierungen — Compounding über Zeit. Zusammen mit dem höheren Gewicht für gewonnene Angebote im Few-Shot-Pool (Etappe-4-Idee) bildet das die echte Lernschicht.
+
+**Reihenfolge wenn das alles drankommt:** zuerst Async-Render (Task #19), weil ohne den jede Render-Iteration durch den 60-s-Proxy-Timeout fällt. Danach in beliebiger Reihenfolge: Saarpor-Layout (#20), Knowledge-Upload (#23), Hedy-Integration (#22), DB-Cleanup (#21).
+
 ---
 
 ## 9. Glossar (für nicht-Engineer-Leser)
