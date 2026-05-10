@@ -31,7 +31,18 @@ export function DownloadButtons({ offerId }: DownloadButtonsProps) {
       if (!url) {
         throw new Error(`${format.toUpperCase()}-URL fehlt in der Antwort.`);
       }
-      window.open(url, "_blank", "noopener,noreferrer");
+      // window.open() after a multi-minute await is silently blocked by the
+      // browser's popup blocker (the user-gesture is gone). A programmatic
+      // anchor click with `download` attribute is treated as a normal
+      // download and goes through.
+      const ext = format === "pptx" ? "pptx" : "docx";
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${data.filename_prefix}.${ext}`;
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
