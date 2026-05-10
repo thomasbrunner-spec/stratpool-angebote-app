@@ -214,17 +214,33 @@ class OfferContent(BaseModel):
     def _parse_list_if_json_string(cls, v: Any) -> Any:
         """Tolerate Claude returning a nested list as a JSON string.
 
-        Same root cause as in v1: the Anthropic tool-use response sometimes
-        serialises complex nested arrays as a single string instead of a
-        native JSON array. Detect and parse so Pydantic gets the list it
-        expects; fall back to passthrough so the normal type error surfaces
-        if the string isn't valid JSON.
+        Anthropic tool-use occasionally serialises complex nested arrays as
+        a single string. Two flavours observed:
+          1. A clean JSON array string with real newlines/quotes — `json.loads`
+             handles it directly.
+          2. A pseudo-JSON string where newlines are written as literal `\\n`
+             and tabs as `\\t` — `json.loads` rejects it. We retry once after
+             unescaping common control sequences.
+        Falls back to passthrough (Pydantic raises the normal list_type error)
+        if neither parse works.
         """
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                return v
+        if not isinstance(v, str):
+            return v
+        # 1) plain JSON
+        try:
+            return json.loads(v)
+        except json.JSONDecodeError:
+            pass
+        # 2) un-escape literal control sequences and retry
+        try:
+            unescaped = (
+                v.replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace("\\r", "\r")
+            )
+            return json.loads(unescaped)
+        except json.JSONDecodeError:
+            pass
         return v
 
 
