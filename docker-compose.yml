@@ -45,6 +45,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      # default = Coolify-managed app network (frontend↔backend); supabase = the
+      # external Supabase Docker network so backend can resolve supabase-db-* by name.
+      - default
+      - supabase
     # Coolify discovers this service for routing if you set SERVICE_FQDN_BACKEND
     # in your Coolify env. Otherwise it stays internal-only.
 
@@ -85,4 +90,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - default
+
+networks:
+  # External Supabase Docker network. Joining it lets the backend resolve
+  # `supabase-db-<hash>` (and other supabase-* containers) by name without
+  # the SSH tunnel that we use locally.
+  supabase:
+    external: true
+    name: cv9l7oliqkgmiu4hr8oufncd
 
