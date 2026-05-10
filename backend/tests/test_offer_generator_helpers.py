@@ -17,6 +17,7 @@ from app.services.offer_generator import (
     _build_user_message,
     _content_to_markdown,
     _render_few_shot,
+    _unwrap_tool_input,
 )
 
 
@@ -140,6 +141,46 @@ def test_build_user_message_without_few_shots() -> None:
     assert "Acme GmbH" in msg
     assert "Discovery-Call-Transkript" in msg
     assert "submit_offer" in msg
+
+
+def _flat_payload() -> dict[str, Any]:
+    return {
+        "angebot_titel": "T",
+        "client_name": "C",
+        "ausgangssituation": "A",
+        "leistungsumfang_intro": "L",
+        "bestandteile": [{"titel": "x", "beschreibung": "y"}],
+        "leistungserbringung": "L",
+        "investition": "I",
+        "rahmenbedingungen": "R",
+    }
+
+
+def test_unwrap_tool_input_passes_flat_payload_through() -> None:
+    payload = _flat_payload()
+    assert _unwrap_tool_input(payload) is payload
+
+
+def test_unwrap_tool_input_unwraps_offer_wrapper() -> None:
+    inner = _flat_payload()
+    assert _unwrap_tool_input({"offer": inner}) is inner
+
+
+def test_unwrap_tool_input_unwraps_arbitrary_single_key_wrapper() -> None:
+    inner = _flat_payload()
+    assert _unwrap_tool_input({"data": inner}) is inner
+
+
+def test_unwrap_tool_input_does_not_unwrap_when_inner_is_unrelated() -> None:
+    weird = {"offer": {"foo": "bar"}}
+    assert _unwrap_tool_input(weird) == weird
+
+
+def test_unwrap_tool_input_passes_partial_flat_through() -> None:
+    # Even with only some fields at the top level, treat it as flat — the
+    # wrapper-detection heuristic must not strip a legitimately partial payload.
+    partial = {"angebot_titel": "T", "client_name": "C"}
+    assert _unwrap_tool_input(partial) is partial
 
 
 def test_build_user_message_with_few_shots() -> None:

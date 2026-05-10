@@ -55,7 +55,11 @@ Anforderungen an Tonfall und Inhalt:
 - Investition: kommuniziere den Preis als Festpreis exklusive MwSt., mit kurzer Begründung des Mehrwerts.
 - Rahmenbedingungen: Standard-Sätze zu Zahlungsziel, Vertraulichkeit, Geltungsdauer.
 
-Struktur und Output: Antworte ausschließlich über den `submit_offer`-Tool-Call mit dem geforderten JSON-Schema. Kein erklärender Text außerhalb des Tool-Calls."""
+Struktur und Output: Antworte ausschließlich über den `submit_offer`-Tool-Call mit dem geforderten JSON-Schema. Kein erklärender Text außerhalb des Tool-Calls.
+
+Wichtig zum Tool-Schema: Übergib die Felder DIREKT als Top-Level-Properties des Tool-Inputs. Verwende KEINEN Wrapper-Key wie `offer` oder `data`.
+Korrekt: `{"angebot_titel": "...", "client_name": "...", ...}`
+Falsch:  `{"offer": {"angebot_titel": "...", ...}}`"""
 
 
 def _load_skeleton() -> str:
@@ -182,7 +186,30 @@ async def _call_claude_for_offer(
     if tool_blocks[0].name != "submit_offer":
         raise RuntimeError(f"Unexpected tool: {tool_blocks[0].name}")
 
-    return OfferContent.model_validate(tool_blocks[0].input)
+    return OfferContent.model_validate(_unwrap_tool_input(tool_blocks[0].input))
+
+
+def _unwrap_tool_input(tool_input: Any) -> Any:
+    """Tolerate a single-key wrapper like `{"offer": {...}}` around the payload.
+
+    Claude Opus 4.7 occasionally wraps the structured tool input even when the
+    schema is flat, which makes Pydantic fail with all fields missing. If we
+    spot a single top-level key whose value already matches OfferContent, we
+    unwrap once and log it.
+    """
+    if not isinstance(tool_input, dict):
+        return tool_input
+    expected = set(OfferContent.model_fields.keys())
+    if expected & tool_input.keys():
+        return tool_input
+    if len(tool_input) == 1:
+        wrapper_key, inner = next(iter(tool_input.items()))
+        if isinstance(inner, dict) and (expected & inner.keys()):
+            logger.warning(
+                f"[generate_offer] Claude wrapped offer under {wrapper_key!r}; unwrapping."
+            )
+            return inner
+    return tool_input
 
 
 async def generate_offer(
