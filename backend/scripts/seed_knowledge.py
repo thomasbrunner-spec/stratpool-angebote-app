@@ -74,6 +74,10 @@ def _is_noise(line: str) -> bool:
 
 
 def _clean_page(raw: str) -> str:
+    # PDF extract sometimes carries NUL bytes and other control chars
+    # that Postgres rejects under UTF8. Strip them before line-level work.
+    raw = raw.replace("\x00", "")
+    raw = re.sub(r"[\x01-\x08\x0b\x0c\x0e-\x1f]", "", raw)
     out: list[str] = []
     for raw_line in raw.splitlines():
         line = raw_line.rstrip()
@@ -223,7 +227,11 @@ async def _seed(source: str, pdf: Path, dry_run: bool) -> None:
             logger.info(f"  embedded {i + 1}/{len(chunks)}")
 
     # Persist. Replace existing rows for the same source.
-    engine = create_async_engine(settings.database_url, echo=False)
+    # `app.db` does the same scheme rewrite — DATABASE_URL is stored with the
+    # plain `postgresql://` scheme so psycopg2 can read it for sync access,
+    # async needs `+asyncpg`.
+    db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
+    engine = create_async_engine(db_url, echo=False)
     async with engine.begin() as conn:
         await conn.execute(
             text("DELETE FROM knowledge_chunks WHERE source = :src"),
