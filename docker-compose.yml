@@ -74,6 +74,10 @@ services:
     # pointed at it. Two service definitions (one per router) confuse traefik
     # ("cannot be linked automatically with multiple Services").
     labels:
+      # Force Traefik to route via the Coolify-managed app network. Without
+      # this, Compose's implicit *_default network confuses traefik when the
+      # service is in more than one network (it picks the wrong IP).
+      - "traefik.docker.network=g11iez4mi3txs8x5kmlk79je"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
       - "traefik.http.routers.http-0-g11iez4mi3txs8x5kmlk79je-frontend.service=frontend"
       - "traefik.http.routers.https-0-g11iez4mi3txs8x5kmlk79je-frontend.service=frontend"
