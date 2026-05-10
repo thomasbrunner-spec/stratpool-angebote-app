@@ -179,23 +179,43 @@ print(f"Gespeichert: {OUTPUT}")
 
 ---
 
-## Layout-Variation – Folie für Folie überlegen
+## Standard-Architektur eines ERA-Angebots-Decks (Pflichtreihenfolge)
 
-Ein gutes ERA-Angebot lebt von **visueller Abwechslung**. Nicht jede Folie soll `1 x Content` sein. Beim Komponieren des Decks pro Folie aktiv überlegen, welches Layout am besten passt:
+ERA-Angebote sind **Verkaufspitches, keine Modul-Listings**. Sie folgen einer klaren Erzähl-Architektur. Wenn ein Angebot mit Discovery-Transkript + freigegebenem Inhalts-JSON gerendert wird, **diese Reihenfolge einhalten**:
 
-| Inhalt | Bevorzugtes Layout |
-|--------|--------------------|
-| Vergleich zweier Aspekte | `2 x Content` |
-| 3 Säulen / Phasen / Kategorien | `3 x Content` oder `4 x Content` |
-| Text + visuelles Element | `Content + Picture` |
-| Hervorgehobener Abschnitt | `1/2 Page Light Blue Horizontal Panel` oder `Dark Blue Panel` |
-| Hellblauer Hintergrund (visuelle Pause) | `1 x Content Light Blue` |
-| Übergang zwischen Kapiteln | `Abschnitts-\nüberschrift` |
-| Großes Statement, freie Komposition | `Nur Titel` oder `Leer` |
-| Investitions-Hero (große Zahl) | `Leer` mit eigenem Layout |
-| Anwendungsfelder / Phasen mit nummerierten Schritten | `Leer` mit Kreisen + Verbindungen |
+| # | Slide-Typ | Kern-Layout | Inhalt | Quelle aus OfferContent |
+|---|-----------|-------------|--------|-------------------------|
+| 1 | **Cover** | `Cover` (Template-Layout) | Kunde, Berater(s), Datum | client_name, settings.berater_*, co_consultant |
+| 2 | **Management Summary** | `Leer` mit Titelleiste | Hero-Absatz, kein Bullet-Point | management_summary |
+| 3 | **Hook-Quote** | `Leer` (Statement-Slide) | Großer zitierter Insight, Trebuchet 32–40pt italic | hook_quote |
+| 4 | **Warum jetzt** | `Leer` mit 2–4 Argumenten | Markt/Urgency, optional große Zahlen | warum_jetzt_argumente |
+| 5 | **Ausgangssituation** | `Leer` mit zwei Spalten | linke Spalte „Was wir mitgenommen haben" + rechte Spalte „Erste Hypothesen" | ausgangssituation + erkannte_anwendungsfaelle |
+| 6 | **Zielsetzung** | `Leer` mit 4 Etappen | Identifizieren / Bewerten / Dokumentieren / Umsetzen + Ergebnis-Box | zielsetzung_und_ergebnis |
+| 7 | **Vorgehen-Übersicht** | `Leer` mit Phasen-Grid | Alle Phasen als nummerierte Tiles | phasen (Übersicht) |
+| 8…N | **Phase-Detail-Slides** | `Leer` mit Setup + Ergebnis | EINE Slide pro Phase, mit Beschreibung, Setup-Karten (Dauer/Format/Teilnehmer/Moderation), Aktivitäten, Ergebnis | phasen[i] (eine Slide pro Phase) |
+| N+1 | **Technische Basis** | `Leer` mit 2–4 Spalten | Tech-Optionen mit Beschreibung | technische_basis |
+| N+2 | **Mehrwert auf 3 Ebenen** | `Leer` 3-Spalten-Grid | Strategisch / Organisatorisch / Menschlich | mehrwert_3_ebenen |
+| N+3 | **Was im Angebot enthalten ist** | `Leer` mit nummerierter Liste | Liste der Liefer-Items mit Mini-Beschreibungen | leistungsumfang_items |
+| N+4 | **Investition** | `Leer` Hero-Komposition | Große Preis-Zahl + Wert-Argument | investition |
+| N+5 | **Nächste Schritte / CTA** | `Leer` weicher Abschluss | Konkrete Folgeschritte | naechste_schritte |
+| Letzte | **Ihr Ansprechpartner** | `Bio x 1` oder `Bio x 3` | Hauptberater (+ ggf. Co-Berater) | settings.berater_* + co_consultant |
 
-**Faustregel:** In einem 12-Folien-Deck sollten mindestens 4–5 verschiedene Layouts vorkommen. Wenn `1 x Content` mehr als 4× hintereinander auftaucht, bewusst variieren.
+**Daraus ergibt sich ein Deck mit 12–16 Folien je nach Anzahl Phasen** — passt zur Saarpor-Referenz (17 Folien, 16 davon „Leer"-Layout).
+
+## Layout-Wahl: Leer ist Default, nicht `1 x Content`
+
+Standard-`1 x Content` / `2 x Content` / `3 x Content` Layouts sind **nicht** der Default. Sie führen zu generischen Bullet-Listen, die Verkaufsstärke kosten. **Default ist `Leer`** — eine Leinwand für freie Kompositionen mit Titelleiste + ERA-CI-Bausteinen.
+
+| Inhalt | Default-Layout | Wann doch ein Standard-Layout? |
+|--------|----------------|--------------------------------|
+| Hook-Statement, Quote, Hero-Slide | `Leer` | Nie |
+| Phasen-Übersicht, Phase-Detail | `Leer` mit Karten/Grid | Nie |
+| Mehrwert-3-Ebenen, Tech-Optionen | `Leer` mit Spalten | `3 x Content` nur, wenn ausschließlich Bullet-Lists |
+| Sehr einfache 2-Spalten-Aufzählung | `2 x Content` | wenn rein bulleted |
+| Ansprechpartner-Slide | `Bio x 1` / `Bio x 3` | Immer |
+| Cover | `Cover` | Immer |
+
+**Faustregel:** In einem ERA-Angebot mit ≥10 Folien nutzen mindestens 70 % der Body-Folien das `Leer`-Layout. Standard-Content-Layouts erscheinen höchstens für sekundäre Aufzählungen.
 
 ## Eigene Layouts – Fallback wenn kein Template-Layout passt
 
@@ -330,6 +350,193 @@ for text, top in LINES:
 Wenn nur **ein** Berater vorhanden ist, bleibt der Layout-Block unverändert (Default Thomas Löwer im Template) — hier ist die Berater-Datenquelle nicht ideal, dann besser den Layout-Block überschreiben **und** keinen Overlay setzen.
 
 ---
+
+## Anti-Patterns – nicht akzeptabel
+
+Diese Muster machen das Deck billig oder generisch — strikt vermeiden:
+
+- **Bullet-Hellscape**: 6+ Bullet-Points hintereinander auf einer Folie. Wenn so viel Inhalt anfällt → in Karten / Spalten / mehrere Folien aufteilen.
+- **Zwei-Punkt-Listen**: Bullet-Lists mit nur 2 Einträgen — wirken stiefmütterlich. Lösung: als Prosa schreiben oder einen dritten substanziellen Punkt einfügen, sonst weglassen.
+- **„Modul A / Modul B / Modul C"**: anonyme Bezeichner. Phasen haben sprechende Namen („Vorbereitung", „Strategischer Workshop", „Vertiefung & Prototyp", „Umsetzung").
+- **„Teil 1 / Teil 2"-Aufteilung** für eine Aufzählung, weil sie auf einer Folie nicht passt: die Aufzählung gehört auf eine Folie als Karten-Grid, oder als getrennte semantische Folien (z. B. eine Folie pro Phase).
+- **Generische Bestandteile-Boxen** ohne klare Inhalts-Differenzierung: jede Bestandteil-/Phase-Folie hat einen eigenen erkennbaren Charakter (Setup-Tabelle, Ergebnis-Card, Aktivitäten-Liste).
+- **Body-Text fett**: Body in Layout-Slides ist immer `regular`. Fett nur für Hervorhebungen einzelner Wörter, nie für ganze Absätze.
+- **Cover ohne Co-Berater wenn vorhanden**: wenn `co_consultant` gesetzt ist → Zwei-Berater-Layout (siehe oben). Sonst nur Hauptberater.
+- **Wiederholte Adjektive**: „klar / klar / klar" in einer Folie wirkt billig. Variieren oder weglassen.
+- **Letzte Slide leer / nur „Vielen Dank"**: die letzte Slide ist `Bio x 1` / `Bio x 3` (Ansprechpartner) oder ein konkreter CTA — nie ein Filler.
+
+## Recipes für „Leer"-Slide-Kompositionen
+
+Wenn das Layout `Leer` gewählt ist, nutze diese Bausteine als wiederverwendbare Recipes. Helper sind oben definiert (`add_era_title_bar`, `add_era_textbox`, `add_era_accent`).
+
+### Hook-Quote-Slide (Statement)
+
+```python
+# Mittig auf der Folie, sehr großer Text, in ERA-Blau, italic.
+# Höhe der Slide: 7.5", Breite: 13.33".
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, "")  # leer oder kurzer Eyebrow
+quote_box = slide.shapes.add_textbox(
+    Inches(1.5), Inches(2.5), Inches(10.3), Inches(2.5))
+tf = quote_box.text_frame
+tf.word_wrap = True
+run = tf.paragraphs[0].add_run()
+run.text = HOOK_QUOTE
+run.font.name = "Trebuchet MS"
+run.font.size = Pt(32)
+run.font.italic = True
+run.font.color.rgb = RGBColor(0x00, 0x3A, 0x70)
+add_era_accent(slide, left_in=1.5, top_in=2.4, width_in=1.0, height_in=0.08)
+```
+
+### Phase-Detail-Slide (eine Phase, mit Setup-Karten + Ergebnis)
+
+```python
+# Layout-Plan:
+# - Titelleiste: "Phase {nummer} – {titel}"
+# - Untertitel: "{untertitel}" als kleine Eyebrow direkt unter Titelleiste
+# - Beschreibung als Prosa-Block links, ca. 4.5" breit
+# - Setup-Karten rechts (Dauer / Format / Teilnehmer / Moderation als 4 Mini-Cards)
+# - Aktivitäten-Liste unten (falls vorhanden)
+# - Ergebnis-Card am Boden rechts in ERA-Blau-Highlight
+
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, f"Phase {p.nummer} – {p.titel}")
+if p.untertitel:
+    add_era_textbox(slide, 0.4, 1.15, 12.5, 0.3, p.untertitel,
+                    font_size=14, dark_blue=True)
+
+# Beschreibung links
+add_era_textbox(slide, 0.4, 1.7, 6.5, 2.5, p.beschreibung,
+                font_size=14, bold=False, dark_blue=True)
+
+# Setup-Karten rechts (z. B. Dauer / Format / Teilnehmer / Moderation)
+right_x = 7.2
+for j, (label, value) in enumerate(setup_pairs):  # baue aus p.dauer, p.format, ...
+    y = 1.7 + j * 0.7
+    add_era_textbox(slide, right_x, y, 1.5, 0.3, label.upper(),
+                    font_size=10, dark_blue=False)  # ggf. orange via shape
+    add_era_textbox(slide, right_x + 1.6, y, 4.3, 0.4, value,
+                    font_size=14, dark_blue=True)
+
+# Ergebnis-Card unten
+result_bar = slide.shapes.add_shape(
+    1, Inches(0.4), Inches(6.0), Inches(12.5), Inches(0.9))
+result_bar.fill.solid()
+result_bar.fill.fore_color.rgb = RGBColor(0x00, 0x3A, 0x70)
+result_bar.line.fill.background()
+add_era_textbox(slide, 0.6, 6.05, 12.0, 0.35, "ERGEBNIS",
+                font_size=11, dark_blue=False)
+add_era_textbox(slide, 0.6, 6.4, 12.0, 0.5, p.ergebnis,
+                font_size=14, dark_blue=False)
+```
+
+### Phasen-Übersicht (Grid mit nummerierten Tiles)
+
+```python
+# 4 Phasen → 4-Spalten-Grid; bei 3 Phasen → 3 Spalten (zentriert);
+# bei 5–6 Phasen → 2 Reihen.
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, "Projektablauf in {n} Phasen")
+
+cols = len(PHASEN)
+slide_w = 13.33
+margin = 0.4
+gap = 0.3
+tile_w = (slide_w - 2 * margin - gap * (cols - 1)) / cols
+top = 1.5
+
+for i, p in enumerate(PHASEN):
+    x = margin + i * (tile_w + gap)
+    # Nummer-Kreis
+    circle = slide.shapes.add_shape(
+        9, Inches(x), Inches(top), Inches(0.8), Inches(0.8))
+    circle.fill.solid()
+    circle.fill.fore_color.rgb = RGBColor(0xFF, 0x9C, 0x00)  # orange
+    add_era_textbox(slide, x, top + 0.15, 0.8, 0.5, str(p.nummer),
+                    font_size=24, bold=True, dark_blue=False)
+    # Titel
+    add_era_textbox(slide, x, top + 0.95, tile_w, 0.4, p.titel,
+                    font_size=16, bold=True, dark_blue=True)
+    # Eyebrow / Untertitel
+    if p.untertitel:
+        add_era_textbox(slide, x, top + 1.4, tile_w, 0.3, p.untertitel,
+                        font_size=11, dark_blue=True)
+    # Kurz-Beschreibung
+    add_era_textbox(slide, x, top + 1.8, tile_w, 2.5,
+                    short_summary(p.beschreibung),
+                    font_size=12, dark_blue=True)
+```
+
+### Mehrwert auf drei Ebenen (3-Spalten-Grid)
+
+```python
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, "Ein klarer, messbarer Mehrwert auf drei Ebenen")
+add_era_textbox(slide, 0.4, 1.15, 12.5, 0.3,
+                "Nutzen für {kunde} – strategisch, organisatorisch, menschlich.",
+                font_size=14, dark_blue=True)
+
+cols = 3
+gap = 0.3
+margin = 0.4
+slide_w = 13.33
+tile_w = (slide_w - 2 * margin - gap * (cols - 1)) / cols
+
+for i, ebene in enumerate(MEHRWERT):  # exakt 3
+    x = margin + i * (tile_w + gap)
+    add_era_accent(slide, x, 1.7, tile_w * 0.35, 0.06)
+    add_era_textbox(slide, x, 1.85, tile_w, 0.5, ebene.ebene.upper(),
+                    font_size=14, bold=True, dark_blue=True)
+    for j, p in enumerate(ebene.punkte):
+        y = 2.5 + j * 0.65
+        add_era_textbox(slide, x, y, tile_w, 0.55, f"•  {p}",
+                        font_size=12, dark_blue=True)
+```
+
+### Investition-Hero
+
+```python
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, "Ihre Investition")
+# Riesige Preis-Zahl
+add_era_textbox(slide, 0.6, 1.8, 6, 1.5, f"{PREIS_FORMATIERT}",
+                font_size=72, bold=True, dark_blue=True)
+add_era_textbox(slide, 0.6, 3.4, 6, 0.4, "EUR exkl. MwSt.",
+                font_size=18, dark_blue=True)
+# Wert-Argument rechts als Prosa
+add_era_textbox(slide, 7.2, 1.9, 5.7, 4.5, INVESTITION_TEXT,
+                font_size=14, bold=False, dark_blue=True)
+```
+
+### Was im Angebot enthalten ist (nummerierte Liste mit Beschreibungen)
+
+```python
+slide = prs.slides.add_slide(get_layout("Leer"))
+add_era_title_bar(slide, "Was im Angebot enthalten ist")
+y = 1.5
+for it in LEISTUNGS_ITEMS:
+    # Nummer-Kreis links, Titel + Beschreibung rechts
+    circle = slide.shapes.add_shape(
+        9, Inches(0.5), Inches(y), Inches(0.55), Inches(0.55))
+    circle.fill.solid()
+    circle.fill.fore_color.rgb = RGBColor(0x00, 0x3A, 0x70)
+    add_era_textbox(slide, 0.5, y + 0.07, 0.55, 0.45, str(it.nummer),
+                    font_size=18, bold=True, dark_blue=False)
+    add_era_textbox(slide, 1.3, y, 11.5, 0.35, it.titel,
+                    font_size=14, bold=True, dark_blue=True)
+    add_era_textbox(slide, 1.3, y + 0.4, 11.5, 0.5, it.beschreibung,
+                    font_size=12, dark_blue=True)
+    y += 1.0  # Zeilenhöhe; bei vielen Items verkleinern
+```
+
+## Inhaltsquellen pro Render-Aufruf
+
+Der Render-Aufruf liefert Claude:
+1. **Discovery-Call-Transkript** – Roh-Material für Kontext-Tiefe.
+2. **Freigegebenes OfferContent (JSON)** – die vom Berater finalisierte Inhaltsversion. **Diese ist führend** für die Inhalte der Slides 2–N+5. Das Transkript wird nur konsultiert, wenn das OfferContent nicht alle Details abdeckt (z. B. spezifische Personen-Namen, die im Discovery erwähnt wurden).
+
+Wenn `OfferContent` komplett ist (was es bei v2 immer sein muss), keine Inhalte aus dem Transkript erfinden, die nicht im OfferContent stehen. Das OfferContent ist die Single Source of Truth.
 
 ## QA (Pflicht nach jeder Erstellung)
 

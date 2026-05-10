@@ -35,12 +35,19 @@ router = APIRouter(prefix="/offers", tags=["offers"])
 # Seed offers + early drafts have user_id=NULL because auth.users was empty
 # at seed time. Switch to per-user filtering once we onboard a second berater.
 
-# Legacy-pool guard: seed offers are stored as raw markdown
-# (`content_json = {"format": "legacy_markdown", "markdown": "..."}`) and
-# exist only as few-shot material. They must not appear as user-facing offers
-# because they don't conform to OfferContent.
+# Filter for "list/detail-renderable" content. We currently only show v2
+# offers in the UI:
+#   - legacy_markdown: seed pool, never user-facing
+#   - v1 (8-field schema, "bestandteile" key, no "phasen"): pre-storytelling
+#     drafts created before 2026-05-10. Stay in DB as history but don't
+#     appear in the list since OfferContent v2 wouldn't validate them.
+#   - v2 (current, "phasen" key): everything from now on.
 def _is_user_content(content_json: dict) -> bool:
-    return isinstance(content_json, dict) and "angebot_titel" in content_json
+    return (
+        isinstance(content_json, dict)
+        and "angebot_titel" in content_json
+        and "phasen" in content_json
+    )
 
 
 @router.post(
@@ -300,6 +307,7 @@ async def render_offer_endpoint(
                 consulting_type=offer.consulting_type,
                 price_eur=offer.price_eur,
                 co_consultant=offer.co_consultant,
+                offer_content_json=latest.content_json,
             )
         except RenderError as exc:
             logger.exception(f"skill-render failed (format={format})")

@@ -77,8 +77,15 @@ def _build_user_message(
     price_eur: Decimal | None,
     co_consultant: Consultant | None,
     few_shot_file_ids: list[str],
+    offer_content_json: dict | None = None,
 ) -> list[dict]:
-    """Compose the multipart user message for the rendering request."""
+    """Compose the multipart user message for the rendering request.
+
+    `offer_content_json` is the storytelling-schema payload the user has
+    finalised in the editor. It's the single source of truth for the slide
+    content (slides 2..N+5 in the SKILL recipe). The discovery transcript
+    is kept as background context for details that don't fit the schema.
+    """
     parts: list[dict] = []
 
     # 1. The reference decks/docs — Claude sees them as containers it can open.
@@ -102,7 +109,29 @@ def _build_user_message(
     spec = _FORMATS[fmt]
     skill_name = "era-presentation" if fmt == "pptx" else "era-word"
 
-    text = f"""Erstelle ein {spec.pptx_or_docx_label} für das folgende ERA-Group-Beratungsmandat. Nutze den {skill_name}-Skill für die ERA-CI.
+    content_block = ""
+    if offer_content_json:
+        # Pretty-print so it's clearly a contract, not raw JSON noise.
+        import json as _json
+        pretty = _json.dumps(offer_content_json, ensure_ascii=False, indent=2)
+        content_block = (
+            "\n## Freigegebenes Angebot (führend für die Inhalte der Folien 2..N)\n\n"
+            "Das folgende JSON ist die vom Berater finalisierte Inhaltsversion. "
+            "Du nutzt diese Felder 1:1 für die jeweils im Skill beschriebenen "
+            "Slides (siehe Recipes-Tabelle: management_summary → Slide 2, "
+            "hook_quote → Slide 3, warum_jetzt_argumente → Slide 4, "
+            "ausgangssituation + erkannte_anwendungsfaelle → Slide 5, "
+            "zielsetzung_und_ergebnis → Slide 6, phasen → Übersicht + je eine "
+            "Detail-Slide, technische_basis → Tech-Slide, mehrwert_3_ebenen → "
+            "Mehrwert-Slide, leistungsumfang_items → Leistungs-Slide, "
+            "investition → Hero-Slide, naechste_schritte → CTA-Slide).\n\n"
+            "Erfinde KEINE Inhalte, die nicht im JSON oder im Discovery stehen. "
+            "Erkenne fehlende oder zu kurze Felder und gleiche sie mit Material "
+            "aus dem Discovery-Transkript aus, niemals mit generischen Floskeln.\n\n"
+            f"```json\n{pretty}\n```\n"
+        )
+
+    text = f"""Erstelle ein {spec.pptx_or_docx_label} für das folgende ERA-Group-Beratungsmandat. Nutze den {skill_name}-Skill für die ERA-CI **und folge der dort beschriebenen Standard-Architektur (Cover → Management Summary → Hook → Warum jetzt → Ausgangssituation → Zielsetzung → Phasen-Übersicht → Phase-Detail-Slides → Tech → Mehrwert → Leistungsumfang → Investition → CTA → Ansprechpartner). Default-Layout für Body-Slides ist `Leer` mit eigenen Kompositionen, NICHT `1 x Content`.**
 
 ## Hauptberater
 - Name: {settings.berater_name}
@@ -114,15 +143,17 @@ def _build_user_message(
 - Kunde: {client_name}
 - Branche: {industry or 'unbekannt'}
 - Beratungsart: {consulting_type}
-{price_line}{notes_line}
-## Discovery-Transkript
+{price_line}{notes_line}{content_block}
+## Discovery-Transkript (Hintergrund-Kontext, sekundär)
 
 {transcript}
 
 ## Anweisungen
-- Folge der ERA-CI strikt (Schriften, Farben, Logo, Header/Footer wo vorgesehen).
-- Inhalt muss zum vorliegenden Mandat passen — nicht generisch.
+- Folge der ERA-CI strikt (Schriften, Farben, Logo, Header/Footer wo vorgesehen) und der Standard-Architektur aus dem Skill.
+- Inhalt aus dem freigegebenen Angebot-JSON ist führend; das Transkript dient nur zur Kontext-Anreicherung.
 - Body-Text in normaler Schrift (regular), nicht fett (außer für Headlines/Hervorhebungen).
+- Body-Folien nutzen mehrheitlich `Leer`-Layout mit eigenen Kompositionen (siehe SKILL Recipes). KEIN durchgehender Einsatz von `1 x Content`.
+- KEINE Bullet-Listen mit weniger als 3 Punkten. KEIN „Modul A/B/C"-Pattern.
 - Schreibe das Ergebnis nach `/home/claude/{spec.output_filename}` und führe die im Skill beschriebenen QA-Schritte aus.
 - Antworte am Ende mit dem absoluten Pfad zur fertigen Datei und einer 1-Satz-Zusammenfassung."""
 
@@ -150,6 +181,7 @@ async def render_offer_via_skill(
     consulting_type: str,
     price_eur: Decimal | None,
     co_consultant: Consultant | None,
+    offer_content_json: dict | None = None,
 ) -> bytes:
     """Trigger Claude to compose and render the offer; return the file bytes."""
     if fmt not in _FORMATS:
@@ -174,6 +206,7 @@ async def render_offer_via_skill(
         price_eur=price_eur,
         co_consultant=co_consultant,
         few_shot_file_ids=few_shots if fmt == "pptx" else [],
+        offer_content_json=offer_content_json,
     )
 
     t0 = time.time()

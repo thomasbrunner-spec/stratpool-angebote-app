@@ -97,7 +97,7 @@ def test_render_few_shot_legacy_markdown() -> None:
     assert "# Inhalt" in rendered
 
 
-def test_render_few_shot_structured_content() -> None:
+def test_render_few_shot_structured_v2_content() -> None:
     rv = _FakeRetrieved(
         offer=_FakeOffer(
             id=uuid.uuid4(),
@@ -109,50 +109,58 @@ def test_render_few_shot_structured_content() -> None:
             content_json={
                 "angebot_titel": "KI-Strategie für B",
                 "client_name": "Kunde B",
+                "management_summary": "Big picture about B.",
+                "hook_quote": "Der Schlüssel liegt nicht in der Technologie.",
                 "ausgangssituation": "Situation X",
-                "leistungsumfang_intro": "Wir liefern Y",
-                "bestandteile": [
-                    {"titel": "Auftakt", "beschreibung": "Workshop"},
-                    {"titel": "Analyse", "beschreibung": "Bewertung"},
+                "phasen": [
+                    {"nummer": 1, "titel": "Vorbereitung", "beschreibung": "Stakeholder-Interviews", "ergebnis": "Workshop-Konzept"},
+                    {"nummer": 2, "titel": "Workshop", "beschreibung": "Ein Tag", "ergebnis": "Priorisierung"},
                 ],
-                "leistungserbringung": "Remote",
                 "investition": "10k EUR",
-                "rahmenbedingungen": "14 Tage",
             }
         ),
         score=0.91,
     )
     rendered = _render_few_shot(rv)  # type: ignore[arg-type]
     assert "KI-Strategie für B" in rendered
-    assert "Bestandteil 1 — Auftakt" in rendered
-    assert "Bestandteil 2 — Analyse" in rendered
+    assert "Phase 1 — Vorbereitung" in rendered
+    assert "Phase 2 — Workshop" in rendered
     assert "10k EUR" in rendered
+    assert "Big picture about B." in rendered
 
 
 def test_content_to_markdown_handles_missing_fields() -> None:
     md = _content_to_markdown({"angebot_titel": "Nur Titel"})
     assert "Nur Titel" in md
-    assert "Bestandteil" not in md
+    assert "Phase " not in md
 
 
-def test_build_user_message_without_few_shots() -> None:
-    msg = _build_user_message(_request(), retrieved=[])
+def test_build_user_message_without_few_shots_or_knowledge() -> None:
+    msg = _build_user_message(_request(), retrieved=[], knowledge=[])
     assert "Referenz-Angebote" not in msg
+    assert "Domänen-Wissen" not in msg
     assert "Acme GmbH" in msg
     assert "Discovery-Call-Transkript" in msg
     assert "submit_offer" in msg
 
 
 def _flat_payload() -> dict[str, Any]:
+    """Mock OfferContent v2 payload — only need the keys, not full content."""
     return {
         "angebot_titel": "T",
         "client_name": "C",
+        "management_summary": "summary",
+        "hook_quote": "quote",
+        "warum_jetzt_argumente": ["a", "b"],
         "ausgangssituation": "A",
-        "leistungsumfang_intro": "L",
-        "bestandteile": [{"titel": "x", "beschreibung": "y"}],
-        "leistungserbringung": "L",
+        "erkannte_anwendungsfaelle": ["x", "y", "z"],
+        "zielsetzung_und_ergebnis": "Z",
+        "phasen": [{"nummer": 1, "titel": "P1", "beschreibung": "x", "ergebnis": "y"}],
+        "technische_basis": [{"titel": "T", "beschreibung": "B"}],
+        "mehrwert_3_ebenen": [],
+        "leistungsumfang_items": [],
         "investition": "I",
-        "rahmenbedingungen": "R",
+        "naechste_schritte": "N",
     }
 
 
@@ -196,7 +204,27 @@ def test_build_user_message_with_few_shots() -> None:
         ),
         score=0.7,
     )
-    msg = _build_user_message(_request(), retrieved=[rv])  # type: ignore[list-item]
+    msg = _build_user_message(_request(), retrieved=[rv], knowledge=[])  # type: ignore[list-item]
     assert "Referenz-Angebote" in msg
     assert "# Beispiel" in msg
     assert msg.index("Referenz-Angebote") < msg.index("Neues Angebot")
+
+
+def test_build_user_message_with_knowledge_block_first() -> None:
+    """Knowledge block must come BEFORE few-shots and BEFORE inputs."""
+    from app.services.knowledge import RetrievedKnowledge
+
+    @dataclass
+    class _FakeChunk:
+        chapter: str | None
+        title: str | None
+        text: str
+        ord: int
+
+    chunk = RetrievedKnowledge(
+        chunk=_FakeChunk(chapter="3", title="Discovery Call", text="Was ein guter Discovery Call ausmacht.", ord=0),  # type: ignore[arg-type]
+        score=0.85,
+    )
+    msg = _build_user_message(_request(), retrieved=[], knowledge=[chunk])
+    assert "Domänen-Wissen" in msg
+    assert msg.index("Domänen-Wissen") < msg.index("Neues Angebot")

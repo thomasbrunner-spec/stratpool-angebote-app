@@ -27,7 +27,33 @@ export interface OfferGenerateRequest {
   co_consultant_id: string | null;
 }
 
-export interface OfferContentBestandteil {
+// Schema v2 — keep in sync with backend/app/schemas/offer.py.
+
+export interface OfferPhase {
+  nummer: number;
+  titel: string;
+  untertitel?: string | null;
+  beschreibung: string;
+  dauer?: string | null;
+  format?: string | null;
+  teilnehmer?: string | null;
+  moderation?: string | null;
+  aktivitaeten: string[];
+  ergebnis: string;
+}
+
+export interface OfferTechOption {
+  titel: string;
+  beschreibung: string;
+}
+
+export interface OfferMehrwertEbene {
+  ebene: string;
+  punkte: string[];
+}
+
+export interface OfferLeistungsItem {
+  nummer: number;
   titel: string;
   beschreibung: string;
 }
@@ -35,12 +61,18 @@ export interface OfferContentBestandteil {
 export interface OfferContent {
   angebot_titel: string;
   client_name: string;
+  management_summary: string;
+  hook_quote: string;
+  warum_jetzt_argumente: string[];
   ausgangssituation: string;
-  leistungsumfang_intro: string;
-  bestandteile: OfferContentBestandteil[];
-  leistungserbringung: string;
+  erkannte_anwendungsfaelle: string[];
+  zielsetzung_und_ergebnis: string;
+  phasen: OfferPhase[];
+  technische_basis: OfferTechOption[];
+  mehrwert_3_ebenen: OfferMehrwertEbene[];
+  leistungsumfang_items: OfferLeistungsItem[];
   investition: string;
-  rahmenbedingungen: string;
+  naechste_schritte: string;
 }
 
 export interface OfferGenerateResponse {
@@ -49,6 +81,7 @@ export interface OfferGenerateResponse {
   version_number: number;
   content: OfferContent;
   retrieved_offer_ids: string[];
+  knowledge_chunk_count: number;
   created_at: string;
 }
 
