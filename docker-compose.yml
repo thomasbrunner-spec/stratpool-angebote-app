@@ -63,13 +63,15 @@ services:
         condition: service_healthy
     expose:
       - "3000"
-    # Coolify auto-generates router labels but skips the service/port binding,
-    # which leaves traefik with a 503 "no available server" for the frontend.
-    # Define matching services pointing at port 3000 so Coolify's routers
-    # ('http-0-<uuid>-frontend' / 'https-0-<uuid>-frontend') resolve correctly.
+    # Coolify auto-generates router labels for multi-service compose but skips
+    # the service/port bindings -> traefik 503 "no available server".
+    # Fix: one named service on port 3000, both Coolify routers explicitly
+    # pointed at it. Two service definitions (one per router) confuse traefik
+    # ("cannot be linked automatically with multiple Services").
     labels:
-      - "traefik.http.services.http-0-g11iez4mi3txs8x5kmlk79je-frontend.loadbalancer.server.port=3000"
-      - "traefik.http.services.https-0-g11iez4mi3txs8x5kmlk79je-frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.http-0-g11iez4mi3txs8x5kmlk79je-frontend.service=frontend"
+      - "traefik.http.routers.https-0-g11iez4mi3txs8x5kmlk79je-frontend.service=frontend"
     environment:
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
