@@ -1,4 +1,5 @@
 import { Badge, Card } from "@thomasbrunner-spec/design-system";
+import { DownloadButtons } from "@/components/DownloadButtons";
 import { OfferContentView } from "@/components/OfferContentView";
 import type { OfferGenerateResponse } from "@/lib/types/offer";
 
@@ -26,6 +27,18 @@ export function OfferPreview({ result }: OfferPreviewProps) {
           </span>
         </div>
       </div>
+
+      <Card>
+        <Card.Header>
+          <Card.Title>Word / PowerPoint rendern</Card.Title>
+          <Card.Description>
+            Direkt aus dieser Vorschau heraus, kein Umweg über die Detailseite nötig.
+          </Card.Description>
+        </Card.Header>
+        <Card.Content>
+          <DownloadButtons offerId={result.offer_id} />
+        </Card.Content>
+      </Card>
 
       <OfferContentView content={c} />
 
