@@ -25,7 +25,13 @@ from app.models.consultant import Consultant
 settings = get_settings()
 
 _BETAS = ["skills-2025-10-02", "code-execution-2025-05-22", "files-api-2025-04-14"]
-_MAX_TOKENS = 16384
+# 32k is needed once the deck grows to the storytelling architecture
+# (Cover + Mgmt Summary + Hook + Markt + Ausgangslage + Zielsetzung +
+#  Phasen-Übersicht + 4 Phase-Detail-Slides + Tech + Mehrwert + Items
+#  + Investition + CTA + Bio = 14–17 slides, each composed via the
+#  python-pptx recipes from SKILL.md). With 16k Claude was hitting
+#  max_tokens before saving the file (stop_reason=max_tokens, no .pptx).
+_MAX_TOKENS = 32768
 
 RenderFormat = Literal["pptx", "word"]
 
@@ -224,7 +230,9 @@ async def render_offer_via_skill(
         ).data
     }
 
-    response = await client.beta.messages.create(
+    # Streaming mandatory at this token count — see offer_generator for the
+    # same pattern. The Anthropic SDK rejects non-streamed long requests.
+    async with client.beta.messages.stream(
         model=settings.render_model,
         max_tokens=_MAX_TOKENS,
         container={
@@ -236,7 +244,8 @@ async def render_offer_via_skill(
         tools=[{"type": "code_execution_20260120", "name": "code_execution"}],
         messages=[{"role": "user", "content": user_content}],
         betas=_BETAS,
-    )
+    ) as stream:
+        response = await stream.get_final_message()
     logger.info(
         f"[render_via_skill] fmt={fmt} response in {time.time() - t0:.1f}s — "
         f"stop_reason={response.stop_reason} "
