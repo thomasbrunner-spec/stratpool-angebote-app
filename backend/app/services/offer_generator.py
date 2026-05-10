@@ -38,10 +38,11 @@ settings = get_settings()
 
 DEFAULT_K_FEW_SHOTS = 3
 DEFAULT_K_KNOWLEDGE = 5
-# 16384 gives Claude enough room for the v2 schema (12 fields, several nested
-# lists). At 8192 the management_summary + 4 phases + leistungsumfang_items
-# easily ran into max_tokens cuts that broke Pydantic validation.
-MAX_OUTPUT_TOKENS = 16384
+# 32768 lets Claude really fill out v2 (Saarpor-level depth: 5+ phases with
+# 4 setup attributes each, 6+ leistungsumfang_items with full descriptions,
+# 3 mehrwert layers with up to 6 bullets each, etc.). 16k still left the
+# model summarizing prematurely on rich discoveries.
+MAX_OUTPUT_TOKENS = 32768
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _SKELETON_PATH = _PROMPTS_DIR / "offer_skeleton.md"
