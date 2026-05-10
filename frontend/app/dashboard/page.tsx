@@ -45,6 +45,9 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link href="/prompts">
+              <Button variant="secondary">Prompts</Button>
+            </Link>
             <Link href="/angebote">
               <Button variant="secondary">Angebote</Button>
             </Link>
