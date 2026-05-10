@@ -8,7 +8,7 @@
 **Zweck:** AI-gestützter Generator für ERA-Group-Angebote — Discovery-Call-Transkript + Preis + Anmerkungen → Few-Shot-Retrieval aus Bestandsangeboten → Anthropic Claude → strukturiertes Angebots-JSON → Word/PowerPoint-Render im ERA-CI.
 **Repo:** `thomasbrunner-spec/stratpool-angebote-app`
 **Subdomain:** `angebote.stratpool.pro`
-**Status:** In Entwicklung (Etappe 2 der Stratpool-Plattform)
+**Status:** Live auf `https://angebote.stratpool.pro`. Alle Blöcke 1–7 fertig (Stand 2026-05-10). Siehe `docs/PROJEKT.md` für die vollständige Projekt-Übersicht.
 
 ## Architektur
 
@@ -118,19 +118,18 @@ uv run alembic upgrade head
 - **Niemals** `private: true` in `package.json` setzen
 - **Niemals** `pnpm version` doppelt definieren
 
-## Template-Bugs, die hier gefixt wurden (für Upstream-PR ans Template)
+## Template-Bugs aus diesem Projekt — gefixt im Upstream
 
-1. **Lockfiles nicht ausgeliefert** — `pnpm-lock.yaml` und `uv.lock` müssen ins Template
-2. **`secrets.environment` in `docker-compose.yml`** ist unzuverlässig — auf `secrets.file` umstellen
-3. **Token-Injection im Frontend-Dockerfile** — `npm config set` schreibt in `~/.npmrc`, pnpm liest aber projekt-`.npmrc` zuerst → Token muss direkt in projekt-`.npmrc` injiziert werden
-4. **TS-Strict-Mode-Fehler** in `frontend/lib/supabase/{middleware,server}.ts` — `cookiesToSet` braucht explizite `CookieOptions`-Annotation
+Sechs Template-Bugs wurden hier identifiziert und sind in PR #1 des `stratpool-app-template` zusammengefasst (Coolify-Healthcheck-IPv6, Traefik-Multi-Service-Linking, Supabase-Network, NPM-Token-Injection, Compose-Secrets, TS-Strict-Cookies, Lockfiles, public/.gitkeep). Details in `docs/PROJEKT.md` Abschnitt 5 und im Template `docs/DEPLOY.md`.
 
-## Roadmap
+## Roadmap (alle Blöcke fertig, Stand 2026-05-10)
 
-- [x] Block 1 — App-Identität säubern (CLAUDE.md, package.json, pyproject.toml, layout-Metadata)
-- [ ] Block 2 — SQLAlchemy-Models für offers/versions/embeddings + Alembic-Baseline
-- [ ] Block 3 — Bestandsangebote (4 anonymisierte) einseeden
-- [ ] Block 4 — Generierungs-Pipeline (POST /api/v1/offers/generate)
-- [ ] Block 5 — Frontend (Eingabe-Form, Vorschau, Versions-History, Status-Tagging)
-- [ ] Block 6 — Word/PPT-Render via era-word / era-presentation Skills
-- [ ] Block 7 — DNS-A-Record + Coolify-Deployment
+- [x] Block 1 — App-Identität säubern
+- [x] Block 2 — SQLAlchemy-Models + Alembic-Baseline
+- [x] Block 3 — Bestandsangebote-Seed-Pipeline
+- [x] Block 4 — Generierungs-Pipeline (POST /api/v1/offers/generate)
+- [x] Block 5a — `/angebote/neu` Form + Vorschau
+- [x] Block 5b — `/angebote` Liste + Detail + Status-Selector
+- [ ] Block 5c — Versions-History UI (bewusst zurückgestellt, Block 6 wichtiger)
+- [x] Block 6 — Word/PPT-Render via era-word / era-presentation Skills
+- [x] Block 7 — DNS + Coolify-Deployment auf `angebote.stratpool.pro`
