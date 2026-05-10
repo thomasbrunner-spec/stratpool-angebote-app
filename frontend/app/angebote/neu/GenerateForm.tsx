@@ -173,7 +173,7 @@ export function GenerateForm() {
                   type="number"
                   inputMode="decimal"
                   min="1"
-                  step="100"
+                  step="any"
                   required
                   value={fields.price_eur}
                   onChange={(e) => update("price_eur", e.target.value)}
