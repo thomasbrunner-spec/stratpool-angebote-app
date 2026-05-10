@@ -7,12 +7,13 @@ The same schema drives the Anthropic tool-use spec — keep them in sync.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.offer import CONSULTING_TYPES
 
@@ -55,6 +56,23 @@ class OfferContent(BaseModel):
     leistungserbringung: str = Field(min_length=1)
     investition: str = Field(min_length=1)
     rahmenbedingungen: str = Field(min_length=1)
+
+    @field_validator("bestandteile", mode="before")
+    @classmethod
+    def _parse_bestandteile_if_json_string(cls, v: Any) -> Any:
+        """Tolerate Claude returning the nested list as a JSON string.
+
+        Claude Opus 4.7 occasionally serialises complex nested arrays inside
+        a tool-use block as a string ('[{"titel": "..."}, ...]') instead of
+        a native JSON array. Detect and parse so Pydantic gets the list it
+        expects.
+        """
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v  # let the normal list_type validation report it
+        return v
 
 
 class OfferGenerateResponse(BaseModel):

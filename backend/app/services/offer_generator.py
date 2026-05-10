@@ -57,9 +57,13 @@ Anforderungen an Tonfall und Inhalt:
 
 Struktur und Output: Antworte ausschließlich über den `submit_offer`-Tool-Call mit dem geforderten JSON-Schema. Kein erklärender Text außerhalb des Tool-Calls.
 
-Wichtig zum Tool-Schema: Übergib die Felder DIREKT als Top-Level-Properties des Tool-Inputs. Verwende KEINEN Wrapper-Key wie `offer` oder `data`.
-Korrekt: `{"angebot_titel": "...", "client_name": "...", ...}`
-Falsch:  `{"offer": {"angebot_titel": "...", ...}}`"""
+Wichtig zum Tool-Schema:
+1. Übergib die Felder DIREKT als Top-Level-Properties des Tool-Inputs. Verwende KEINEN Wrapper-Key wie `offer` oder `data`.
+   Korrekt: `{"angebot_titel": "...", "client_name": "...", ...}`
+   Falsch:  `{"offer": {"angebot_titel": "...", ...}}`
+2. `bestandteile` MUSS ein echtes JSON-Array sein, NIEMALS ein als String serialisiertes Array.
+   Korrekt: `"bestandteile": [{"titel": "...", "beschreibung": "..."}]`
+   Falsch:  `"bestandteile": "[{\\"titel\\": \\"...\\"}]"`"""
 
 
 def _load_skeleton() -> str:

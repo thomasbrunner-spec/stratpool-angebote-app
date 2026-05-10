@@ -92,6 +92,24 @@ def test_content_rejects_too_many_bestandteile() -> None:
         OfferContent(**bad)
 
 
+def test_content_parses_bestandteile_when_claude_sends_json_string() -> None:
+    """Claude Opus 4.7 sometimes returns the nested array as a JSON string."""
+    import json
+
+    kwargs = _valid_content_kwargs()
+    kwargs["bestandteile"] = json.dumps(kwargs["bestandteile"])
+    content = OfferContent(**kwargs)
+    assert len(content.bestandteile) == 2
+    assert content.bestandteile[0].titel == "Kick-off"
+
+
+def test_content_rejects_unparseable_bestandteile_string() -> None:
+    bad = _valid_content_kwargs()
+    bad["bestandteile"] = "not even close to JSON"
+    with pytest.raises(ValidationError):
+        OfferContent(**bad)
+
+
 def test_bestandteil_requires_titel_and_beschreibung() -> None:
     with pytest.raises(ValidationError):
         OfferContentBestandteil(titel="", beschreibung="ok")
