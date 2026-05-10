@@ -1,7 +1,7 @@
 # Projekt-Dossier: Stratpool Angebote-App
 
 > Dieses Dokument ist die Lang-Version. Für die schnelle Übersicht reicht der README.
-> Geschrieben am 2026-05-10, nach dem ersten erfolgreichen Coolify-Deploy.
+> Erstellt 2026-05-10 vormittags, ergänzt am 2026-05-10 abends mit dem Quality-Push (v2-Schema, Knowledge-Base, Storytelling-Render).
 
 ---
 
@@ -98,13 +98,34 @@ Die Entwicklung lief in 7 Etappen ("Blöcke"). Alle abgeschlossen, Stand 2026-05
 | **5a** | `/angebote/neu` Form + Vorschau-Cards | 2026-05-09 |
 | **5b** | `/angebote` Liste + `/angebote/[id]` Detail + Status-Selector | 2026-05-09 |
 | **5c** | Versions-History UI | **bewusst zurückgestellt**, Block 6 wichtiger |
+| **5d** | Inhalt-Edit mit Versionierung (`PUT /content`, `OfferContentEditor`) | 2026-05-10 |
+| **5e** | Prompt-Viewer (`/prompts`-Seite, `GET /api/v1/prompts`) | 2026-05-10 |
+| **5f** | **Quality-Push**: Knowledge-Base + v2-Storytelling-Schema + Skill-Recipes | 2026-05-10 |
 | **6** | PPT-Render via Anthropic code_execution + Custom-Skill `era-presentation` | 2026-05-09 |
 | **6c** | Word-Render via `era-word`-Skill (analog) | 2026-05-09 |
 | **7** | DNS + Coolify-Deployment auf `https://angebote.stratpool.pro` | 2026-05-10 |
 
 ---
 
-## 5. Coolify-Deploy-Survival-Kit (was am 10.05. wirklich passiert ist)
+## 5a. Quality-Push am 2026-05-10 abends
+
+Nach Block 7 wurde klar: das v1-Schema (8 flache Felder, „bestandteile") produziert generische Modul-Listings, das Skill rendert sie in Standard-`1 x Content`-Layouts → keine Verkaufskraft. Drei strukturelle Eingriffe:
+
+**Knowledge-Base mit pgvector.** Neue Tabelle `knowledge_chunks` (Migration 0003). Das KISB-Kompendium (394 S., 12 Kapitel zu Anbahnung / Sensibilisierung / 3 Ebenen / Change-Management) wurde in 326 Chunks à ~3500 Zeichen geschnitten und mit Voyage `voyage-3-large` embedded. Bei jedem Generate werden zusätzlich zu den Top-3-Few-Shots aus dem Bestandsangebote-Pool die Top-5-Knowledge-Chunks abgerufen und vor dem Discovery-Transkript in den Prompt eingebaut.
+
+**OfferContent v2 — Storytelling-Schema.** Vom 8-Felder-v1 zu 14 Feldern, abgeleitet aus der Architektur der Saarpor-Referenz: `management_summary`, `hook_quote`, `warum_jetzt_argumente[]`, `ausgangssituation`, `erkannte_anwendungsfaelle[]`, `zielsetzung_und_ergebnis`, `phasen[]` (mit Setup-Karten), `technische_basis[]`, `mehrwert_3_ebenen[]` (genau drei), `leistungsumfang_items[]`, `investition`, `naechste_schritte`. Pydantic-Validator toleriert defensiv JSON-string-encoded Listen mit literal `\n`/`\t` (Anthropic-Tool-Use-Quirk). System-Prompt + Skelett-Datei rewrite Richtung Storytelling und Anti-Floskeln. `max_tokens` 16k → 32k mit Streaming-API.
+
+**Render-Skill `era-presentation` v `1778423650334841`.** SKILL.md auf ~27 KB gewachsen, mit:
+- **Pflicht-Slide-Architektur** Cover → Mgmt Summary → Hook → Warum jetzt → Ausgangssituation → Zielsetzung → Phasen-Übersicht → Phase-Detail-Slides → Tech → Mehrwert → Leistungsumfang → Investition → CTA → Bio (14–17 Slides je nach Phasen-Anzahl)
+- **`Leer`-Layout als Default** statt `1 x Content` (Saarpor: 16/17 Slides nutzen `Leer`)
+- **Anti-Pattern-Liste** (keine <3-Bullet-Lists, kein „Modul A/B/C", kein „Teil 1/Teil 2", kein Bullet-Hellscape)
+- **Konkrete python-pptx-Recipes** für Hook-Quote, Phase-Detail, Phasen-Übersicht-Grid, Mehrwert-3-Spalten, Investition-Hero, Leistungsumfang-Liste
+
+Render-Endpoint übergibt jetzt das `latest.content_json` als führende Quelle für Slides 2..N+5 — Discovery-Transkript bleibt nur als Hintergrund-Kontext.
+
+**Token-Realität:** ein Render mit der v2-Architektur verbraucht ca. 22.700 Output-Tokens × $75/M ≈ **$1,70 pro Render** bei Opus 4.7. Input ist quasi gratis, weil Skills + Template aus dem Cache kommen. Latenz ~6 min — was den `fetch failed`-Bug auslöst (Coolify-Proxy 60-s-Timeout).
+
+## 5b. Coolify-Deploy-Survival-Kit (vom Vormittag)
 
 Block 7 sah am Vorabend nach "fast fertig" aus — Container `running:healthy`, Domain DNS-resolved, alle ENVs gesetzt. Trotzdem: **HTTP 503 "no available server"** auf der FQDN.
 
@@ -230,21 +251,22 @@ Memory ist nicht im Repo — sie liegt in `~/.claude/projects/-Users-thomasbrunn
 
 ---
 
-## 8. Was offen ist (Stand 2026-05-10)
+## 8. Was offen ist (Stand 2026-05-10 abends)
 
-### Funktional
-- **Browser-E2E zu Ende**: Generate-Pfad voll durchklicken (Login → /angebote/neu → Generate → Detail → PPT-Render → Word-Render). Liste-Verifikation ist durch.
-- **Block 5c — Versions-History UI**: Bewusst pausiert. Nice-to-have.
+### Hauptpunkt für die nächste Session
+**Asynchroner Render mit Polling**. Aktuell: Render dauert ~6 min, Coolify-Proxy bricht nach 60 s die Browser→Backend-Connection ab → Frontend zeigt "fetch failed", obwohl der Backend sauber durchläuft und das File speichert. Workaround: nach ~5 min nochmal "PowerPoint herunterladen" klicken, dann kommt's aus dem Cache. Saubere Lösung: `POST /render` gibt 202 + job-id, Backend startet `asyncio.create_task`, Frontend pollt `GET /render/status?job_id` alle 10 s. Aufwand ~1–2 h. **Sollte vor weiteren Skill-Iterationen kommen** — sonst frustet jede Iteration.
+
+### Saarpor-Layout-Push
+PPT-Optik geht in die richtige Richtung, aber noch nicht auf Saarpor-Niveau. Nächste Skill-Iteration: dunkelblauer Hintergrund auf Hero-Slides, orange Akzente prominenter, Phase-Detail-Folien als Karten-Layout.
 
 ### Cleanup (alles optional)
+- Alte v1-Drafts in DB sind unsichtbar (Filter), können trotzdem per `DELETE FROM offers WHERE …` raus.
 - `backend/assets/ERA_Template.pptx` und `backend/skills/era-presentation/assets/ERA_Template.pptx` sind Duplikate (12 MB). Können raus.
 - `python-pptx` aus `pyproject.toml` Hauptdeps in Group `seed` verschieben.
-- Test-Drafts in DB löschen: `DELETE FROM offers WHERE client_name = 'Mustermann Maschinenbau GmbH';`
 - Hauptberater (du) aus `.env` in `consultants`-Tabelle ziehen mit `is_primary=true`.
 
 ### Plattform-Followups
-- Template-PR #1 reviewen und mergen.
-- Lokales Verzeichnis umbenennen: `mv ~/Desktop/Claude-Code/stratpoo-app-template ~/Desktop/Claude-Code/stratpool-app-template`.
+- Lokales Verzeichnis umbenennen: `mv ~/Desktop/Claude-Code/stratpoo-app-template ~/Desktop/Claude-Code/stratpool-app-template` (falls noch nicht).
 
 ---
 
