@@ -91,6 +91,11 @@ export interface OfferStatusUpdate {
   status: OfferStatus;
 }
 
+export interface OfferContentUpdate {
+  content: OfferContent;
+  revision_notes: string | null;
+}
+
 export interface OfferRenderResponse {
   offer_id: string;
   version_id: string;

@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db
-from app.models import Offer
+from app.models import Offer, OfferVersion
 from app.schemas.offer import (
     OfferContent,
+    OfferContentUpdate,
     OfferDetail,
     OfferGenerateRequest,
     OfferGenerateResponse,
@@ -186,6 +187,57 @@ async def update_offer_status(
             detail=f"Offer {offer_id} not found",
         )
     offer.status = body.status
+    await session.commit()
+    return await _load_detail(session, offer_id)
+
+
+@router.put("/{offer_id}/content", response_model=OfferDetail)
+async def update_offer_content(
+    offer_id: uuid.UUID,
+    body: OfferContentUpdate,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferDetail:
+    """Persist edited offer content as a new version.
+
+    Each save creates `latest.version_number + 1` so the original generate
+    output stays reproducible and stale render artifacts (pptx_path /
+    word_path) don't carry over to the new version — re-rendering after an
+    edit always produces a fresh artifact.
+    """
+    offer = await session.get(
+        Offer,
+        offer_id,
+        options=[selectinload(Offer.versions)],
+        populate_existing=True,
+    )
+    if offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} not found",
+        )
+    if not offer.versions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Offer {offer_id} has no versions to base an edit on",
+        )
+
+    latest = max(offer.versions, key=lambda v: v.version_number)
+    if not _is_user_content(latest.content_json):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy pool entry is not editable as user content",
+        )
+
+    new_version = OfferVersion(
+        offer_id=offer.id,
+        version_number=latest.version_number + 1,
+        transcript=latest.transcript,
+        user_notes=latest.user_notes,
+        revision_notes=body.revision_notes,
+        content_json=body.content.model_dump(mode="json"),
+    )
+    session.add(new_version)
     await session.commit()
     return await _load_detail(session, offer_id)
 

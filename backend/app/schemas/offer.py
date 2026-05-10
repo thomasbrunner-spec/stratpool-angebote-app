@@ -126,6 +126,17 @@ class OfferStatusUpdate(BaseModel):
     status: OfferStatus
 
 
+class OfferContentUpdate(BaseModel):
+    """Body for PUT /offers/{id}/content — saves the edited offer payload as a new version.
+
+    `revision_notes` is optional, free-form text — useful when a future
+    versions-history UI shows what changed between v_n and v_n+1.
+    """
+
+    content: OfferContent
+    revision_notes: str | None = Field(default=None, max_length=2000)
+
+
 class OfferRenderResponse(BaseModel):
     """Signed download URLs for the rendered artifacts of an offer's latest version."""
 

@@ -4,7 +4,7 @@ import { Card, Header } from "@thomasbrunner-spec/design-system";
 import { apiCall } from "@/lib/api";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/LogoutButton";
-import { OfferContentView } from "@/components/OfferContentView";
+import { OfferContentSection } from "@/components/OfferContentSection";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusSelector } from "@/components/StatusSelector";
 import { DownloadButtons } from "@/components/DownloadButtons";
@@ -123,7 +123,7 @@ export default async function AngebotDetailPage({ params }: PageProps) {
           </Card.Footer>
         </Card>
 
-        <OfferContentView content={offer.content} />
+        <OfferContentSection offerId={offer.id} content={offer.content} />
       </main>
     </>
   );
