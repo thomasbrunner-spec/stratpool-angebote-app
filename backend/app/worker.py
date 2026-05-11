@@ -37,6 +37,11 @@ async def generate_offer_job(
     Inputs/outputs go through Arq's pickle serializer (default). Returning
     a plain dict keeps the result inspectable from any GET-job handler and
     avoids leaking Pydantic types across the worker/api boundary.
+
+    Exceptions are re-raised as plain RuntimeError because
+    `pydantic_core.ValidationError` (and other native-backed errors) don't
+    pickle cleanly through arq's serializer, which produces a corrupted
+    JobResult that fails to deserialize on the API side.
     """
     request = OfferGenerateRequest.model_validate(request_payload)
     parsed_user_id = uuid.UUID(user_id) if user_id else None
@@ -44,8 +49,15 @@ async def generate_offer_job(
         f"[worker] generate_offer_job start "
         f"job_id={ctx.get('job_id')} client={request.client_name!r}"
     )
-    async with AsyncSessionLocal() as session:
-        response = await generate_offer(request, parsed_user_id, session)
+    try:
+        async with AsyncSessionLocal() as session:
+            response = await generate_offer(request, parsed_user_id, session)
+    except Exception as exc:
+        logger.exception(
+            f"[worker] generate_offer_job failed "
+            f"job_id={ctx.get('job_id')} client={request.client_name!r}"
+        )
+        raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
     logger.info(
         f"[worker] generate_offer_job done "
         f"job_id={ctx.get('job_id')} offer_id={response.offer_id}"

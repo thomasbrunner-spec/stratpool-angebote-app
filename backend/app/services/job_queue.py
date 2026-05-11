@@ -91,8 +91,20 @@ async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
 
     if arq_status == ArqJobStatus.complete:
         # result_info returns a JobResult (subclass of JobDef) with success +
-        # result/exception + timing. Does not block, does not re-raise.
-        job_result = await job.result_info()
+        # result/exception + timing. Does not block, does not re-raise on
+        # exception payloads — but it CAN raise if the stored pickle is
+        # corrupt (e.g. an old job from before we wrapped worker exceptions
+        # in plain RuntimeErrors). Treat that as a clean "failed" so the
+        # frontend can show an actionable error instead of an opaque 503.
+        try:
+            job_result = await job.result_info()
+        except Exception as exc:  # noqa: BLE001 — surface ALL deserialize errors
+            return OfferJobStatusResponse(
+                job_id=job_id,
+                status="failed",
+                error=f"Unable to deserialize job result: {type(exc).__name__}: {exc}",
+            )
+
         if job_result is not None:
             enqueue_time = job_result.enqueue_time
             start_time = job_result.start_time
