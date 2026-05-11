@@ -137,3 +137,25 @@ export interface OfferRenderResponse {
   word_url: string | null;
   filename_prefix: string;
 }
+
+export type JobStatus =
+  | "queued"
+  | "running"
+  | "complete"
+  | "failed"
+  | "not_found";
+
+export interface OfferJobCreateResponse {
+  job_id: string;
+  status: JobStatus;
+}
+
+export interface OfferJobStatusResponse {
+  job_id: string;
+  status: JobStatus;
+  enqueue_time: string | null;
+  start_time: string | null;
+  finish_time: string | null;
+  result: OfferGenerateResponse | null;
+  error: string | null;
+}

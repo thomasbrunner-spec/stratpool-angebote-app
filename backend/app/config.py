@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     jwt_secret: str  # = Supabase JWT Secret
     jwt_algorithm: str = "HS256"
 
+    # Redis (Arq job queue for async offer generation)
+    redis_url: str = "redis://redis:6379/0"
+
     # Berater profile (primary consultant on the right of the cover slide).
     # Single-tenant for now — moves to a per-user profile when we onboard a
     # second user. The secondary consultant is per-offer (see consultants table).

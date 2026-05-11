@@ -6,37 +6,60 @@
 #            the SERVICE_FQDN_* labels and injects routing automatically.
 # ===================================================================
 
+x-backend-env: &backend-env
+  APP_NAME: ${APP_NAME:-stratpool-app}
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  DEBUG: ${DEBUG:-false}
+  API_PREFIX: /api/v1
+  CORS_ORIGINS: ${CORS_ORIGINS:-https://${SERVICE_FQDN_FRONTEND}}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+  RENDER_MODEL: ${RENDER_MODEL:-claude-opus-4-7}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+  VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3-large}
+  SUPABASE_URL: ${SUPABASE_URL}
+  SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+  SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+  DATABASE_URL: ${DATABASE_URL}
+  JWT_SECRET: ${JWT_SECRET}
+  BERATER_NAME: ${BERATER_NAME:-Thomas Brunner}
+  BERATER_TITEL: ${BERATER_TITEL:-Senior Partner}
+  BERATER_TEL: ${BERATER_TEL:-}
+  BERATER_EMAIL: ${BERATER_EMAIL:-tbrunner@eragroup.com}
+  RENDER_STORAGE_BUCKET: ${RENDER_STORAGE_BUCKET:-offer-renders}
+  ERA_PRESENTATION_SKILL_ID: ${ERA_PRESENTATION_SKILL_ID:-}
+  ERA_WORD_SKILL_ID: ${ERA_WORD_SKILL_ID:-}
+  FEW_SHOT_FILE_IDS: ${FEW_SHOT_FILE_IDS:-}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-stratpool-app}-redis
+    restart: unless-stopped
+    # Persist queue state across restarts so in-flight jobs survive a deploy.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - default
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-stratpool-app}-backend
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
-      APP_NAME: ${APP_NAME:-stratpool-app}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
-      DEBUG: ${DEBUG:-false}
-      API_PREFIX: /api/v1
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://${SERVICE_FQDN_FRONTEND}}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
-      RENDER_MODEL: ${RENDER_MODEL:-claude-opus-4-7}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
-      VOYAGE_MODEL: ${VOYAGE_MODEL:-voyage-3-large}
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      BERATER_NAME: ${BERATER_NAME:-Thomas Brunner}
-      BERATER_TITEL: ${BERATER_TITEL:-Senior Partner}
-      BERATER_TEL: ${BERATER_TEL:-}
-      BERATER_EMAIL: ${BERATER_EMAIL:-tbrunner@eragroup.com}
-      RENDER_STORAGE_BUCKET: ${RENDER_STORAGE_BUCKET:-offer-renders}
-      ERA_PRESENTATION_SKILL_ID: ${ERA_PRESENTATION_SKILL_ID:-}
-      ERA_WORD_SKILL_ID: ${ERA_WORD_SKILL_ID:-}
-      FEW_SHOT_FILE_IDS: ${FEW_SHOT_FILE_IDS:-}
+      <<: *backend-env
     healthcheck:
       # Use 127.0.0.1 explicitly: BusyBox/Alpine resolves "localhost" to ::1 first,
       # which fails when the app only binds IPv4 (0.0.0.0). Same fix as frontend.
@@ -52,6 +75,26 @@ services:
       - supabase
     # Coolify discovers this service for routing if you set SERVICE_FQDN_BACKEND
     # in your Coolify env. Otherwise it stays internal-only.
+
+  worker:
+    # Arq worker for long-running offer-generation jobs.
+    # Same image + env as backend, just a different entrypoint. Lives next to
+    # the API so it sees identical config and the same Supabase network for DB
+    # access. No healthcheck because arq blocks on the redis pool.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-stratpool-app}-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+    command: ["uv", "run", "arq", "app.worker.WorkerSettings"]
+    networks:
+      - default
+      - supabase
 
   frontend:
     build:
@@ -104,4 +147,7 @@ networks:
   supabase:
     external: true
     name: cv9l7oliqkgmiu4hr8oufncd
+
+volumes:
+  redis-data:
 

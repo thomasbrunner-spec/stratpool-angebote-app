@@ -14,6 +14,7 @@ from loguru import logger
 
 from app.config import get_settings
 from app.routes import consultants, health, hello, offers, prompts
+from app.services.job_queue import close_pool
 
 settings = get_settings()
 
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Voyage model: {settings.voyage_model}")
     yield
     logger.info(f"👋 Shutting down {settings.app_name}")
+    await close_pool()
 
 
 # ---------------- App ----------------

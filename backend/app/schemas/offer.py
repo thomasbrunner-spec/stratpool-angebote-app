@@ -318,3 +318,33 @@ class OfferRenderResponse(BaseModel):
     pptx_url: str | None = None
     word_url: str | None = None
     filename_prefix: str
+
+
+# ---------------- Async-job schemas ----------------
+
+# `complete` (matches arq's JobStatus naming) plus `failed` for when the
+# worker raised. `queued`/`running` cover the in-flight states. `not_found`
+# is returned for unknown job IDs (or jobs whose result already expired).
+JobStatus = Literal["queued", "running", "complete", "failed", "not_found"]
+
+
+class OfferJobCreateResponse(BaseModel):
+    """Returned by POST /offers/jobs/generate when a job is enqueued."""
+
+    job_id: str
+    status: JobStatus
+
+
+class OfferJobStatusResponse(BaseModel):
+    """Returned by GET /offers/jobs/{job_id}.
+
+    `result` is populated when status=='complete', `error` when 'failed'.
+    """
+
+    job_id: str
+    status: JobStatus
+    enqueue_time: datetime | None = None
+    start_time: datetime | None = None
+    finish_time: datetime | None = None
+    result: OfferGenerateResponse | None = None
+    error: str | None = None

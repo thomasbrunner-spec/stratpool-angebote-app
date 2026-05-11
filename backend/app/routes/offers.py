@@ -18,13 +18,14 @@ from app.schemas.offer import (
     OfferContentUpdate,
     OfferDetail,
     OfferGenerateRequest,
-    OfferGenerateResponse,
+    OfferJobCreateResponse,
+    OfferJobStatusResponse,
     OfferListItem,
     OfferRenderResponse,
     OfferStatusUpdate,
 )
 from app.services.auth import CurrentUser
-from app.services.offer_generator import generate_offer
+from app.services.job_queue import enqueue_offer_generation, get_offer_job_status
 from app.services.render_via_skill import RenderError, render_offer_via_skill
 from app.services.storage import render_path, signed_url, upload_render
 
@@ -51,18 +52,19 @@ def _is_user_content(content_json: dict) -> bool:
 
 
 @router.post(
-    "/generate",
-    response_model=OfferGenerateResponse,
-    status_code=status.HTTP_201_CREATED,
+    "/jobs/generate",
+    response_model=OfferJobCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
-async def generate_offer_endpoint(
+async def enqueue_generate_offer(
     request: OfferGenerateRequest,
     user: CurrentUser,
-    session: Annotated[AsyncSession, Depends(get_db)],
-) -> OfferGenerateResponse:
-    """Generate a new offer (status=draft) from a discovery transcript.
+) -> OfferJobCreateResponse:
+    """Enqueue an async offer-generation job and return the job id immediately.
 
-    Pipeline: embed input → top-K few-shot retrieval → Claude (tool-use) → persist.
+    Generation runs in the Arq worker (see `app.worker`) because the Anthropic
+    streaming call with max_tokens=32k routinely exceeds the 60 s proxy
+    timeout. The client polls GET /offers/jobs/{job_id} until status=='complete'.
     """
     try:
         user_uuid = uuid.UUID(user.id) if user.id else None
@@ -73,12 +75,37 @@ async def generate_offer_endpoint(
         ) from exc
 
     try:
-        return await generate_offer(request, user_uuid, session)
+        job_id = await enqueue_offer_generation(request, user_uuid)
     except Exception as exc:
-        logger.exception("offer generation failed")
+        logger.exception("failed to enqueue offer-generation job")
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Generation failed: {exc}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not enqueue job: {exc}",
+        ) from exc
+
+    logger.info(f"[offers] enqueued offer-generation job_id={job_id}")
+    return OfferJobCreateResponse(job_id=job_id, status="queued")
+
+
+@router.get("/jobs/{job_id}", response_model=OfferJobStatusResponse)
+async def get_generate_offer_job(
+    job_id: str,
+    user: CurrentUser,
+) -> OfferJobStatusResponse:
+    """Poll the status of a previously enqueued offer-generation job.
+
+    Returns `status='complete'` plus the materialised offer in `result`
+    when the worker is done, `status='failed'` with `error` set when the
+    worker raised, `status='not_found'` when the job id is unknown or
+    its result has expired.
+    """
+    try:
+        return await get_offer_job_status(job_id)
+    except Exception as exc:
+        logger.exception(f"failed to read job status for job_id={job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not read job status: {exc}",
         ) from exc
 
 
