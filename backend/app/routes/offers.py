@@ -290,6 +290,10 @@ async def enqueue_render_offer_endpoint(
     format: Annotated[
         str, Query(pattern="^(pptx|word)$", description="Render target format")
     ] = "pptx",
+    force: Annotated[
+        bool,
+        Query(description="If true, ignore the cached artifact and render anew"),
+    ] = False,
 ) -> OfferJobCreateResponse:
     """Enqueue a render job for the offer's latest version and return its id.
 
@@ -297,9 +301,12 @@ async def enqueue_render_offer_endpoint(
     well past the Coolify/Traefik 60 s proxy timeout, so it runs in the
     Arq worker. The client polls GET /offers/render/jobs/{job_id} until
     status=='complete'.
+
+    `force=true` re-runs the skill even if a cached pptx/word artifact
+    exists for this version. Used by the skill-iteration workflow.
     """
     try:
-        job_id = await enqueue_offer_render(offer_id, format)
+        job_id = await enqueue_offer_render(offer_id, format, force=force)
     except Exception as exc:
         logger.exception("failed to enqueue offer-render job")
         raise HTTPException(
@@ -309,7 +316,7 @@ async def enqueue_render_offer_endpoint(
 
     logger.info(
         f"[offers] enqueued offer-render job_id={job_id} "
-        f"offer_id={offer_id} format={format}"
+        f"offer_id={offer_id} format={format} force={force}"
     )
     return OfferJobCreateResponse(job_id=job_id, status="queued")
 

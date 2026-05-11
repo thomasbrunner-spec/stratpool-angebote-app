@@ -66,6 +66,7 @@ async def enqueue_offer_generation(
 async def enqueue_offer_render(
     offer_id: uuid.UUID,
     fmt: str,
+    force: bool = False,
 ) -> str:
     """Enqueue a render_offer_job and return its job_id."""
     pool = await get_pool()
@@ -73,6 +74,7 @@ async def enqueue_offer_render(
         "render_offer_job",
         str(offer_id),
         fmt,
+        force,
     )
     if job is None:
         raise RuntimeError("Failed to enqueue offer-render job")

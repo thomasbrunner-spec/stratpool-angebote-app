@@ -70,6 +70,7 @@ async def render_offer_job(
     ctx: dict,
     offer_id: str,
     fmt: RenderFormat,
+    force: bool = False,
 ) -> dict:
     """Worker entry for the skill-driven PPT/Word render.
 
@@ -77,15 +78,19 @@ async def render_offer_job(
     past the 60-s proxy timeout — so it lives in the worker. Returns the
     same OfferRenderResponse shape the sync endpoint used to produce,
     serialised to a JSON-safe dict.
+
+    `force=True` skips the per-version cache so a fresh artifact is built
+    even if pptx_path/word_path is already set — used by the skill-iteration
+    workflow.
     """
     parsed_id = uuid.UUID(offer_id)
     logger.info(
         f"[worker] render_offer_job start "
-        f"job_id={ctx.get('job_id')} offer_id={offer_id} format={fmt}"
+        f"job_id={ctx.get('job_id')} offer_id={offer_id} format={fmt} force={force}"
     )
     try:
         async with AsyncSessionLocal() as session:
-            response = await perform_offer_render(session, parsed_id, fmt)
+            response = await perform_offer_render(session, parsed_id, fmt, force=force)
     except Exception as exc:
         logger.exception(
             f"[worker] render_offer_job failed "

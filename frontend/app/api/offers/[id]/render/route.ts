@@ -16,9 +16,12 @@ interface RouteContext {
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const format = request.nextUrl.searchParams.get("format") ?? "pptx";
+  const force = request.nextUrl.searchParams.get("force") === "true";
+  const qs = new URLSearchParams({ format });
+  if (force) qs.set("force", "true");
   try {
     const data = await apiCall<OfferJobCreateResponse>(
-      `/api/v1/offers/${id}/render?format=${encodeURIComponent(format)}`,
+      `/api/v1/offers/${id}/render?${qs.toString()}`,
       { method: "POST" },
     );
     return NextResponse.json(data, { status: 202 });

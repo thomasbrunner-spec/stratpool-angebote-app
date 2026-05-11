@@ -123,14 +123,16 @@ export function DownloadButtons({ offerId }: DownloadButtonsProps) {
     a.remove();
   };
 
-  const startRender = async (format: Format) => {
+  const startRender = async (format: Format, force = false) => {
     setError(null);
     setJob(null);
     setPhase("queued");
     downloadFiredRef.current = null;
     try {
+      const qs = new URLSearchParams({ format });
+      if (force) qs.set("force", "true");
       const response = await fetch(
-        `/api/offers/${offerId}/render?format=${format}`,
+        `/api/offers/${offerId}/render?${qs.toString()}`,
         { method: "POST" },
       );
       const data = await response.json();
@@ -171,6 +173,15 @@ export function DownloadButtons({ offerId }: DownloadButtonsProps) {
         >
           {pendingFormat === "word" && loading ? "Rendere…" : "Word herunterladen"}
         </Button>
+        <button
+          type="button"
+          onClick={() => startRender("pptx", true)}
+          disabled={loading}
+          className="text-xs text-text-muted underline underline-offset-2 hover:text-text-dim disabled:opacity-50"
+          title="Cache ignorieren und mit der aktuellen Skill-Version neu erzeugen"
+        >
+          ↻ Neu rendern (Skill-Iteration)
+        </button>
       </div>
       <p className="text-xs text-text-muted">
         Render läuft asynchron im Worker. Folge-Aufrufe sind aus dem Cache und sofort.

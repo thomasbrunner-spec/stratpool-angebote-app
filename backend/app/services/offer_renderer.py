@@ -57,8 +57,13 @@ async def perform_offer_render(
     session: AsyncSession,
     offer_id: uuid.UUID,
     fmt: RenderFormat,
+    force: bool = False,
 ) -> OfferRenderResponse:
-    """Render an offer's latest version to PPT or Word (cached per version)."""
+    """Render an offer's latest version to PPT or Word (cached per version).
+
+    `force=True` invalidates the cached artifact for this (version, format)
+    and runs the skill again. Useful for skill-iteration testing.
+    """
     offer = await session.get(
         Offer,
         offer_id,
@@ -77,7 +82,10 @@ async def perform_offer_render(
         )
 
     path_attr = "pptx_path" if fmt == "pptx" else "word_path"
-    cached = getattr(latest, path_attr)
+    cached = None if force else getattr(latest, path_attr)
+    if force:
+        # Drop the stored path so the new artifact replaces it cleanly.
+        setattr(latest, path_attr, None)
 
     if not cached:
         logger.info(
