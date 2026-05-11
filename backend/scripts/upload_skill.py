@@ -48,6 +48,7 @@ _SPECS: dict[str, SkillSpec] = {
         files=[
             ("SKILL.md", "text/markdown"),
             ("assets/ERA_Template.pptx", _PPTX_MIME),
+            ("assets/era_logo.png", "image/png"),
         ],
     ),
     "era-word": SkillSpec(

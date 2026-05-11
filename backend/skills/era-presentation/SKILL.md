@@ -398,6 +398,23 @@ def add_era_accent(slide, left_in, top_in, width_in, height_in=0.04):
     return bar
 ```
 
+**`add_era_logo(slide)` — ERA-Logo rechts oben (Pflicht auf jeder Content-Slide außer Cover):**
+```python
+def add_era_logo(slide):
+    """Saarpor-Position für das ERA-Logo: (11.85", 0.10"), Größe 1.17" x 0.83".
+
+    Das Logo liegt als PNG unter assets/era_logo.png. Wird auf jeder
+    Content-Slide platziert — nicht auf der Cover-Slide (dort kommt es
+    aus dem Layout-Master) und nicht auf Bio-Slides (kommt ebenfalls aus
+    dem Master).
+    """
+    slide.shapes.add_picture(
+        "assets/era_logo.png",
+        Inches(11.85), Inches(0.10),
+        width=Inches(1.17), height=Inches(0.83),
+    )
+```
+
 **⚠️ Veraltet (NICHT MEHR VERWENDEN):**
 `add_era_title_bar(slide, title)` — erzeugt eine schmale blaue Titelbar oben auf sonst weißem Hintergrund. Das ist NICHT Saarpor-konform. **Stattdessen IMMER:** `add_era_dark_bg(slide)` + `add_era_header(slide, title, subtitle)` + optional `add_era_footer(slide, insight)`.
 
@@ -495,14 +512,27 @@ Diese Muster machen das Deck billig oder generisch — strikt vermeiden:
 
 ## Recipes für „Leer"-Slide-Kompositionen (Saarpor-Pattern)
 
-Jede Content-Slide folgt diesem Skelett:
+Jede Content-Slide folgt diesem Skelett (Reihenfolge zwingend einhalten):
 ```python
 slide = prs.slides.add_slide(get_layout("Leer"))
-add_era_dark_bg(slide)                                 # 1. full-bleed Dunkelblau
-add_era_header(slide, "Slide-Titel", "Eyebrow-Subtitle")  # 2. weiße Kopfzeile
+add_era_dark_bg(slide)                                    # 1. full-bleed Dunkelblau
+add_era_logo(slide)                                       # 2. ERA-Logo rechts oben (Pflicht)
+add_era_header(slide, "Slide-Titel", "Eyebrow-Subtitle")  # 3. weiße Kopfzeile
 # … Slide-spezifische Komposition aus Karten, Ovalen, Texten …
-add_era_footer(slide, "Insight-Satz unten")            # 3. orange Linie + weißer Footer-Text
+add_era_footer(slide, "Insight-Satz unten")               # 4. orange Linie + weißer Footer-Text
 ```
+
+**Logo-Regel:** Das ERA-Logo wird auf JEDER Content-Slide rechts oben platziert. Einzige Ausnahmen:
+- Cover-Slide (Logo kommt aus dem Layout-Master)
+- Bio-Slides `Bio x 1` / `Bio x 3` (Logo kommt ebenfalls aus dem Master)
+
+Sobald `add_era_dark_bg(slide)` aufgerufen wurde, MUSS auch `add_era_logo(slide)` aufgerufen werden — die zwei sind ein untrennbares Paar.
+
+**Text-Overflow-Regel:** Variabler Text aus dem OfferContent (Beschreibungen, Bullets, Prosa-Blöcke) kann unerwartet lang sein. Für JEDE Box mit variablem Text eine der zwei Strategien anwenden:
+1. **Hard-cut vorher:** `text = text if len(text) <= MAX else text[:MAX-3].rstrip() + "…"`. Saubere Limits siehe pro Recipe.
+2. **Auto-shrink:** nach dem `add_era_textbox` setzen: `box.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE` (Import: `from pptx.enum.text import MSO_AUTO_SIZE`).
+
+Niemals einfach hoffen, dass Text passt — er passt im Zweifel nicht und läuft sichtbar aus der Karte raus. Das ist das hässlichste Resultat.
 
 Alle Pixel-Positionen unten sind aus der echten Saarpor-PPTX extrahiert. Bei Iterationen die Positionen beibehalten, nur Texte und Anzahl der Elemente anpassen.
 
@@ -512,6 +542,7 @@ Alle Pixel-Positionen unten sind aus der echten Saarpor-PPTX extrahiert. Bei Ite
 # Full-bleed Dunkelblau + schmaler vertikaler orange Balken links + großer Quote-Text rechts.
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 # Vertikaler orange Balken bei x=0.85, y=1.50 (Höhe 4.50")
 acc = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE,
                               Inches(0.85), Inches(1.50),
@@ -531,6 +562,7 @@ add_era_textbox(slide, 1.15, 2.00, 11.50, 4.00, HOOK_QUOTE,
 # 4 Phasen-Beispiel (auch 3 oder 5 möglich, Spaltenbreite entsprechend skalieren).
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                f"Projektablauf in {len(PHASEN)} Phasen",
                "Vom Kontext zur Umsetzung – strukturiert, beteiligend, ergebnisorientiert.")
@@ -597,6 +629,7 @@ add_era_accent(slide, 0.60, 7.14, 12.10, 0.04)
 # Saarpor verwendet 4 Karten in einer Reihe mit Kartenbreite 2.95" und Abstand 0.30".
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                f"Phase {p.nummer} – {p.titel}",
                p.untertitel or "")
@@ -650,6 +683,7 @@ add_era_textbox(slide, 0.60, 7.05, 12.50, 0.40,
 ```python
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                "Ein klarer, messbarer Mehrwert auf drei Ebenen",
                f"Nutzen für {KUNDE} – strategisch, organisatorisch, menschlich.")
@@ -682,53 +716,84 @@ add_era_footer(slide,
 
 ### Investition-Hero (Saarpor Slide 16: große Hellblau-Hero-Karte links + Inhalts-Bullets rechts)
 
+**Wichtig — Text-Overflow-Schutz:** Diese Slide enthält viel variablen Text (Preis-Zahl, Inklusiv-Liste, Value-Prosa). Die Boxen müssen `MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE` haben ODER per Hand auf realistische Längen gekürzt werden. Konkret:
+- **Preis-Zahl:** maximal 9 Zeichen (`"123.456 €"`) bei font_size=54. Wenn der Preis länger ist (z.B. mit Nachkomma + Währung), font_size auf 48 reduzieren.
+- **Inklusiv-Bullets:** maximal 4 Stück, je maximal 80 Zeichen. Längere Items kürzen oder weglassen.
+- **Value-Prosa rechts:** maximal 350 Zeichen. Längere Texte sind ein Schema-Signal, dass das `investition`-Feld zu lang ist — kürzen, nicht überfließen lassen.
+
 ```python
+from pptx.enum.text import MSO_AUTO_SIZE
+
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                "Ihre Investition",
                "Pauschalpreis – transparent, planbar, ohne Überraschungen.")
 
-# Große Hellblau-Karte links (Pauschalpreis-Hero): Saarpor (0.60, 2.20) bis (8.10, 6.86), Breite 7.50, Höhe 4.60
+# Große Hellblau-Karte links: Breite 7.50", Höhe 4.60"
 add_era_card(slide, 0.60, 2.20, 7.50, 4.60, accent_w=0.85)
-add_era_textbox(slide, 0.85, 2.50, 7.00, 0.50, "Pauschalpreis",
+add_era_textbox(slide, 0.85, 2.45, 7.00, 0.45, "Pauschalpreis",
                 font_size=16, bold=True, on_dark_bg=False)
-# Riesige Preis-Zahl
-add_era_textbox(slide, 0.85, 3.10, 7.00, 1.50, PREIS_FORMATIERT,
-                font_size=60, bold=True, on_dark_bg=False, color=ERA_DARK_BLUE)
-# Kleinere Sub-Info
-add_era_textbox(slide, 0.85, 4.85, 7.00, 0.40,
+
+# Preis-Hero — Schrift-Größe adaptiv an Länge.
+preis_str = PREIS_FORMATIERT  # z.B. "15.990 €"
+preis_fs = 54 if len(preis_str) <= 9 else 44 if len(preis_str) <= 13 else 36
+price_box = add_era_textbox(slide, 0.85, 2.95, 7.00, 1.50,
+                             preis_str,
+                             font_size=preis_fs, bold=True,
+                             on_dark_bg=False, color=ERA_DARK_BLUE)
+# Auto-shrink falls Text doch noch zu breit — pptx-Engine kümmert sich.
+price_box.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+# Sub-Info
+add_era_textbox(slide, 0.85, 4.55, 7.00, 0.35,
                 "zzgl. MwSt. – Spesen nach vorheriger Freigabe.",
                 font_size=11, italic=True, on_dark_bg=False)
+
 # Dunkelblauer Trennstrich
 sep = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE,
-                              Inches(0.85), Inches(5.40),
-                              Inches(6.80), Inches(0.03))
+                              Inches(0.85), Inches(5.05),
+                              Inches(7.00), Inches(0.03))
 sep.fill.solid()
 sep.fill.fore_color.rgb = ERA_DARK_BLUE
 sep.line.fill.background()
-add_era_textbox(slide, 0.85, 5.50, 6.80, 0.35, "Im Pauschalpreis enthalten:",
+add_era_textbox(slide, 0.85, 5.15, 7.00, 0.35, "Im Pauschalpreis enthalten:",
                 font_size=12, bold=True, on_dark_bg=False)
-# 2–4 kurze Inklusiv-Bullets darunter
-y = 5.85
-for inkl in INVESTITION_INKLUSIV[:4]:
-    add_era_textbox(slide, 0.85, y, 6.80, 0.30, f"• {inkl}",
-                    font_size=11, on_dark_bg=False)
-    y += 0.25
 
-# Rechte Spalte: Wert-Argument als Prosa in weiß auf dunkelblau
-add_era_textbox(slide, 8.40, 2.50, 4.50, 4.30,
-                INVESTITION_VALUE_TEXT,
-                font_size=14, on_dark_bg=True)
+# 2–4 kurze Inklusiv-Bullets — bei mehr Items abschneiden statt zu überlaufen
+inklusiv_items = INVESTITION_INKLUSIV[:4]
+y = 5.55
+for inkl in inklusiv_items:
+    # Lange Bullets kürzen, statt Overflow zu riskieren
+    text = inkl if len(inkl) <= 80 else inkl[:77].rstrip() + "…"
+    add_era_textbox(slide, 0.85, y, 7.00, 0.27, f"• {text}",
+                    font_size=10, on_dark_bg=False)
+    y += 0.27
+    if y > 6.65:  # Karten-Boden bei 6.80 — Sicherheits-Margin
+        break
+
+# Rechte Spalte: Wert-Argument als Prosa in weiß auf dunkelblau (kein Karten-Bg)
+value_text = INVESTITION_VALUE_TEXT
+# Hart kürzen statt überlaufen lassen
+if len(value_text) > 400:
+    value_text = value_text[:397].rstrip() + "…"
+value_box = add_era_textbox(slide, 8.40, 2.40, 4.50, 4.30,
+                             value_text,
+                             font_size=13, on_dark_bg=True)
+value_box.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
 
 add_era_footer(slide, "Investition in Klarheit, Geschwindigkeit, Umsetzungsfähigkeit.")
 ```
+
+**Regel für ALLE Karten-Inhalte:** Wenn Text variabel ist (aus dem OfferContent kommt), entweder per `len()`-Check vorher kürzen oder `text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE` setzen. Niemals einfach hoffen, dass der Text passt — er passt im Zweifel nicht.
 
 ### Was im Angebot enthalten ist (nummerierte Liste, vertikal)
 
 ```python
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                "Was im Angebot enthalten ist",
                "Leistungsumfang im Überblick.")
@@ -764,6 +829,7 @@ add_era_footer(slide, "Klare Lieferobjekte, jederzeit nachvollziehbar.")
 ```python
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                "Warum eine KI-Strategie – warum jetzt?",
                "Management Summary")
@@ -779,6 +845,7 @@ add_era_footer(slide, FOOTER_INSIGHT)
 ```python
 slide = prs.slides.add_slide(get_layout("Leer"))
 add_era_dark_bg(slide)
+add_era_logo(slide)
 add_era_header(slide,
                "Warum jetzt der richtige Zeitpunkt ist",
                WARUM_JETZT_LEAD)  # z.B. „KI-Nutzung im deutschen Mittelstand hat sich in einem Jahr verdoppelt."
