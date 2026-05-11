@@ -287,7 +287,22 @@ async def _call_claude_for_offer(
     if tool_blocks[0].name != "submit_offer":
         raise RuntimeError(f"Unexpected tool: {tool_blocks[0].name}")
 
-    return OfferContent.model_validate(_unwrap_tool_input(tool_blocks[0].input))
+    raw_input = _unwrap_tool_input(tool_blocks[0].input)
+    try:
+        return OfferContent.model_validate(raw_input)
+    except Exception:
+        # Log the offending raw payload so we don't have to guess at the
+        # next schema-parser regression. Truncate per-field to keep logs
+        # readable.
+        if isinstance(raw_input, dict):
+            for k, v in raw_input.items():
+                preview = repr(v)
+                if len(preview) > 800:
+                    preview = preview[:800] + "...<truncated>"
+                logger.error(f"[generate_offer] raw tool_input[{k!r}] = {preview}")
+        else:
+            logger.error(f"[generate_offer] raw tool_input (non-dict): {raw_input!r}")
+        raise
 
 
 def _unwrap_tool_input(tool_input: Any) -> Any:

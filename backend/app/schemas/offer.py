@@ -29,6 +29,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from json_repair import repair_json
+from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.offer import CONSULTING_TYPES
@@ -214,15 +216,20 @@ class OfferContent(BaseModel):
     def _parse_list_if_json_string(cls, v: Any) -> Any:
         """Tolerate Claude returning a nested list as a JSON string.
 
-        Anthropic tool-use occasionally serialises complex nested arrays as
-        a single string. Two flavours observed:
-          1. A clean JSON array string with real newlines/quotes — `json.loads`
+        Anthropic tool-use on Opus 4.7 sometimes serialises arrays of complex
+        objects (phasen, mehrwert_3_ebenen) as a single string instead of a
+        native list. Three flavours observed in production:
+
+          1. Clean JSON array string with real newlines/quotes — `json.loads`
              handles it directly.
-          2. A pseudo-JSON string where newlines are written as literal `\\n`
-             and tabs as `\\t` — `json.loads` rejects it. We retry once after
-             unescaping common control sequences.
-        Falls back to passthrough (Pydantic raises the normal list_type error)
-        if neither parse works.
+          2. Pseudo-JSON where newlines/tabs are written as literal `\\n` /
+             `\\t` — `json.loads` rejects it; we unescape and retry.
+          3. Broken JSON with stray quotes, unescaped quotes inside strings,
+             trailing commas, etc. — typical LLM output. `json-repair` fixes
+             these heuristically.
+
+        Falls back to passthrough only if all three strategies fail. In that
+        case the raw input is logged at the call site so we can iterate.
         """
         if not isinstance(v, str):
             return v
@@ -241,6 +248,17 @@ class OfferContent(BaseModel):
             return json.loads(unescaped)
         except json.JSONDecodeError:
             pass
+        # 3) json-repair as last resort — designed for LLM-corrupted JSON
+        try:
+            repaired = repair_json(v, return_objects=True)
+            if isinstance(repaired, list):
+                logger.warning(
+                    f"[schema] _parse_list_if_json_string: recovered via "
+                    f"json-repair (len={len(v)}, first 120={v[:120]!r})"
+                )
+                return repaired
+        except Exception as exc:  # noqa: BLE001 — json-repair is best-effort
+            logger.warning(f"[schema] json-repair also failed: {exc}")
         return v
 
 
