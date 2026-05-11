@@ -21,13 +21,16 @@ from app.schemas.offer import (
     OfferJobCreateResponse,
     OfferJobStatusResponse,
     OfferListItem,
-    OfferRenderResponse,
+    OfferRenderJobStatusResponse,
     OfferStatusUpdate,
 )
 from app.services.auth import CurrentUser
-from app.services.job_queue import enqueue_offer_generation, get_offer_job_status
-from app.services.render_via_skill import RenderError, render_offer_via_skill
-from app.services.storage import render_path, signed_url, upload_render
+from app.services.job_queue import (
+    enqueue_offer_generation,
+    enqueue_offer_render,
+    get_offer_job_status,
+    get_render_job_status,
+)
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 
@@ -276,95 +279,59 @@ async def update_offer_content(
     return await _load_detail(session, offer_id)
 
 
-_FORMAT_MIME = {
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "word": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-}
-_FORMAT_SUFFIX = {"pptx": "pptx", "word": "docx"}
-_SIGNED_URL_TTL_SECONDS = 3600
-
-
-def _filename_prefix(client_name: str) -> str:
-    """`Angebot - <kunde>` with reserved chars stripped, safe for HTTP headers."""
-    safe = "".join(c for c in client_name if c.isalnum() or c in " .-_").strip()
-    return f"Angebot - {safe or 'Angebot'}"
-
-
-@router.post("/{offer_id}/render", response_model=OfferRenderResponse)
-async def render_offer_endpoint(
+@router.post(
+    "/{offer_id}/render",
+    response_model=OfferJobCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def enqueue_render_offer_endpoint(
     offer_id: uuid.UUID,
     user: CurrentUser,
-    session: Annotated[AsyncSession, Depends(get_db)],
     format: Annotated[
         str, Query(pattern="^(pptx|word)$", description="Render target format")
     ] = "pptx",
-) -> OfferRenderResponse:
-    """Render the offer's latest version to PPT or Word.
+) -> OfferJobCreateResponse:
+    """Enqueue a render job for the offer's latest version and return its id.
 
-    Cached: each format is generated once per version and stored in Supabase.
-    Subsequent calls reuse the cached file and only refresh the signed URL.
+    The actual render (Anthropic code-execution) takes 2–5 minutes and is
+    well past the Coolify/Traefik 60 s proxy timeout, so it runs in the
+    Arq worker. The client polls GET /offers/render/jobs/{job_id} until
+    status=='complete'.
     """
-    offer = await session.get(
-        Offer,
-        offer_id,
-        options=[selectinload(Offer.versions), selectinload(Offer.co_consultant)],
-        populate_existing=True,
+    try:
+        job_id = await enqueue_offer_render(offer_id, format)
+    except Exception as exc:
+        logger.exception("failed to enqueue offer-render job")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not enqueue render job: {exc}",
+        ) from exc
+
+    logger.info(
+        f"[offers] enqueued offer-render job_id={job_id} "
+        f"offer_id={offer_id} format={format}"
     )
-    if offer is None:
-        raise HTTPException(status_code=404, detail=f"Offer {offer_id} not found")
-    if not offer.versions:
-        raise HTTPException(status_code=409, detail="Offer has no versions")
+    return OfferJobCreateResponse(job_id=job_id, status="queued")
 
-    latest = max(offer.versions, key=lambda v: v.version_number)
-    if not _is_user_content(latest.content_json):
-        raise HTTPException(status_code=410, detail="Legacy pool entry is not renderable")
 
-    # Select the cached path attribute and per-format MIME.
-    path_attr = "pptx_path" if format == "pptx" else "word_path"
-    cached = getattr(latest, path_attr)
+@router.get(
+    "/render/jobs/{job_id}",
+    response_model=OfferRenderJobStatusResponse,
+)
+async def get_render_offer_job(
+    job_id: str,
+    user: CurrentUser,
+) -> OfferRenderJobStatusResponse:
+    """Poll the status of a previously enqueued render job.
 
-    if not cached:
-        try:
-            payload = await render_offer_via_skill(
-                fmt=format,  # type: ignore[arg-type]
-                transcript=latest.transcript or "",
-                user_notes=latest.user_notes,
-                client_name=offer.client_name,
-                industry=offer.industry,
-                consulting_type=offer.consulting_type,
-                price_eur=offer.price_eur,
-                co_consultant=offer.co_consultant,
-                offer_content_json=latest.content_json,
-            )
-        except RenderError as exc:
-            logger.exception(f"skill-render failed (format={format})")
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except Exception as exc:
-            logger.exception(f"skill-render unexpected error (format={format})")
-            raise HTTPException(status_code=500, detail=f"Render failed: {exc}") from exc
-        storage_path = render_path(
-            str(offer_id), latest.version_number, _FORMAT_SUFFIX[format]
-        )
-        await upload_render(storage_path, payload, _FORMAT_MIME[format])
-        setattr(latest, path_attr, storage_path)
-        await session.commit()
-
-    pptx_url = (
-        await signed_url(latest.pptx_path, expires_in=_SIGNED_URL_TTL_SECONDS)
-        if latest.pptx_path
-        else None
-    )
-    word_url = (
-        await signed_url(latest.word_path, expires_in=_SIGNED_URL_TTL_SECONDS)
-        if latest.word_path
-        else None
-    )
-
-    return OfferRenderResponse(
-        offer_id=offer.id,
-        version_id=latest.id,
-        version_number=latest.version_number,
-        pptx_url=pptx_url,
-        word_url=word_url,
-        filename_prefix=_filename_prefix(offer.client_name),
-    )
+    Returns `status='complete'` plus the OfferRenderResponse in `result`
+    (with signed pptx/word URLs) when the worker is done.
+    """
+    try:
+        return await get_render_job_status(job_id)
+    except Exception as exc:
+        logger.exception(f"failed to read render job status for job_id={job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not read render job status: {exc}",
+        ) from exc

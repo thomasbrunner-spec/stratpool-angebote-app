@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@thomasbrunner-spec/design-system";
-import type { OfferRenderResponse } from "@/lib/types/offer";
+import type {
+  JobStatus,
+  OfferJobCreateResponse,
+  OfferRenderJobStatusResponse,
+} from "@/lib/types/offer";
 
 type Format = "pptx" | "word";
 
@@ -10,68 +14,172 @@ interface DownloadButtonsProps {
   offerId: string;
 }
 
-export function DownloadButtons({ offerId }: DownloadButtonsProps) {
-  const [pending, setPending] = useState<Format | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const POLL_INTERVAL_MS = 2000;
 
-  const triggerDownload = async (format: Format) => {
-    setPending(format);
+interface RenderJob {
+  jobId: string;
+  format: Format;
+}
+
+export function DownloadButtons({ offerId }: DownloadButtonsProps) {
+  const [job, setJob] = useState<RenderJob | null>(null);
+  const [phase, setPhase] = useState<JobStatus | "idle">("idle");
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  // Latest format the user clicked — used to label the spinner and as
+  // a stable handle for "which button is pending" after the click event
+  // has been long forgotten.
+  const pendingFormat = job?.format ?? null;
+  const loading = phase === "queued" || phase === "running";
+  // Avoid double-firing the download anchor if React re-renders.
+  const downloadFiredRef = useRef<string | null>(null);
+
+  // Elapsed counter — render runs 2-5 min, so an honest tick keeps the user
+  // from refreshing.
+  useEffect(() => {
+    if (!loading) {
+      setElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const tick = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [loading]);
+
+  // Poll the job until terminal status; on complete, trigger the download
+  // via an anchor click. window.open() doesn't work here — the user gesture
+  // is gone after the multi-minute wait — but a synthetic anchor click with
+  // the `download` attribute bypasses the popup blocker.
+  useEffect(() => {
+    if (!job) return;
+    let cancelled = false;
+
+    async function poll() {
+      while (!cancelled && job) {
+        try {
+          const response = await fetch(`/api/offers/render/jobs/${job.jobId}`, {
+            cache: "no-store",
+          });
+          if (!response.ok) {
+            const data = await response.json().catch(() => null);
+            throw new Error(
+              data?.error ?? `Status-Polling fehlgeschlagen (${response.status})`,
+            );
+          }
+          const data = (await response.json()) as OfferRenderJobStatusResponse;
+          if (cancelled) return;
+          setPhase(data.status);
+
+          if (data.status === "complete" && data.result) {
+            triggerDownload(job.jobId, job.format, data.result);
+            return;
+          }
+          if (data.status === "failed") {
+            setError(data.error ?? "Unbekannter Render-Fehler");
+            return;
+          }
+          if (data.status === "not_found") {
+            setError("Render-Job nicht gefunden — bitte erneut anfordern.");
+            return;
+          }
+        } catch (err) {
+          if (cancelled) return;
+          setError(err instanceof Error ? err.message : "Unknown error");
+          setPhase("failed");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    }
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [job]);
+
+  const triggerDownload = (
+    jobId: string,
+    format: Format,
+    result: OfferRenderJobStatusResponse["result"],
+  ) => {
+    if (!result) return;
+    if (downloadFiredRef.current === jobId) return;
+    downloadFiredRef.current = jobId;
+    const url = format === "pptx" ? result.pptx_url : result.word_url;
+    if (!url) {
+      setError(`${format.toUpperCase()}-URL fehlt in der Antwort.`);
+      return;
+    }
+    const ext = format === "pptx" ? "pptx" : "docx";
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${result.filename_prefix}.${ext}`;
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const startRender = async (format: Format) => {
     setError(null);
+    setJob(null);
+    setPhase("queued");
+    downloadFiredRef.current = null;
     try {
       const response = await fetch(
         `/api/offers/${offerId}/render?format=${format}`,
-        { method: "POST" }
+        { method: "POST" },
       );
+      const data = await response.json();
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? `Render failed: ${response.status}`);
+        throw new Error(data?.error ?? `Render-Enqueue fehlgeschlagen (${response.status})`);
       }
-      const data: OfferRenderResponse = await response.json();
-      const url = format === "pptx" ? data.pptx_url : data.word_url;
-      if (!url) {
-        throw new Error(`${format.toUpperCase()}-URL fehlt in der Antwort.`);
-      }
-      // window.open() after a multi-minute await is silently blocked by the
-      // browser's popup blocker (the user-gesture is gone). A programmatic
-      // anchor click with `download` attribute is treated as a normal
-      // download and goes through.
-      const ext = format === "pptx" ? "pptx" : "docx";
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${data.filename_prefix}.${ext}`;
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const created = data as OfferJobCreateResponse;
+      setJob({ jobId: created.job_id, format });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setPending(null);
+      setPhase("failed");
     }
   };
+
+  const phaseLabel =
+    phase === "queued"
+      ? "In Warteschlange…"
+      : phase === "running"
+        ? `Render läuft (${elapsedSec}s, typisch 2–5 Min)…`
+        : phase === "complete"
+          ? "Fertig — Download wird gestartet."
+          : null;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         <Button
           variant="primary"
-          onClick={() => triggerDownload("pptx")}
-          disabled={pending !== null}
+          onClick={() => startRender("pptx")}
+          disabled={loading}
         >
-          {pending === "pptx" ? "Rendere…" : "PowerPoint herunterladen"}
+          {pendingFormat === "pptx" && loading ? "Rendere…" : "PowerPoint herunterladen"}
         </Button>
         <Button
           variant="secondary"
-          onClick={() => triggerDownload("word")}
-          disabled={pending !== null}
+          onClick={() => startRender("word")}
+          disabled={loading}
         >
-          {pending === "word" ? "Rendere…" : "Word herunterladen"}
+          {pendingFormat === "word" && loading ? "Rendere…" : "Word herunterladen"}
         </Button>
       </div>
       <p className="text-xs text-text-muted">
-        Erstmaliger Render dauert 2–5 Minuten (Anthropic Code-Execution).
-        Folge-Aufrufe sind aus dem Cache und sofort.
+        Render läuft asynchron im Worker. Folge-Aufrufe sind aus dem Cache und sofort.
       </p>
+      {phaseLabel && (
+        <p className="text-xs text-text-dim" role="status" aria-live="polite">
+          {phaseLabel}
+        </p>
+      )}
       {error && (
         <p className="text-xs text-danger" role="alert">
           {error}

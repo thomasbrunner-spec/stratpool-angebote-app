@@ -159,3 +159,13 @@ export interface OfferJobStatusResponse {
   result: OfferGenerateResponse | null;
   error: string | null;
 }
+
+export interface OfferRenderJobStatusResponse {
+  job_id: string;
+  status: JobStatus;
+  enqueue_time: string | null;
+  start_time: string | null;
+  finish_time: string | null;
+  result: OfferRenderResponse | null;
+  error: string | null;
+}

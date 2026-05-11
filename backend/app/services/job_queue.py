@@ -8,11 +8,11 @@ pool is lazily created on first use and reused across requests.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
 from arq.jobs import Job
 from arq.jobs import JobStatus as ArqJobStatus
+from pydantic import BaseModel
 
 from app.config import get_settings
 from app.schemas.offer import (
@@ -20,6 +20,8 @@ from app.schemas.offer import (
     OfferGenerateRequest,
     OfferGenerateResponse,
     OfferJobStatusResponse,
+    OfferRenderJobStatusResponse,
+    OfferRenderResponse,
 )
 
 settings = get_settings()
@@ -61,6 +63,22 @@ async def enqueue_offer_generation(
     return job.job_id
 
 
+async def enqueue_offer_render(
+    offer_id: uuid.UUID,
+    fmt: str,
+) -> str:
+    """Enqueue a render_offer_job and return its job_id."""
+    pool = await get_pool()
+    job = await pool.enqueue_job(
+        "render_offer_job",
+        str(offer_id),
+        fmt,
+    )
+    if job is None:
+        raise RuntimeError("Failed to enqueue offer-render job")
+    return job.job_id
+
+
 _STATUS_MAP: dict[ArqJobStatus, JobStatus] = {
     ArqJobStatus.deferred: "queued",
     ArqJobStatus.queued: "queued",
@@ -70,8 +88,14 @@ _STATUS_MAP: dict[ArqJobStatus, JobStatus] = {
 }
 
 
-async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
-    """Look up a job's status and (if finished) materialise its result.
+async def _read_job_status[TResult: BaseModel, TResponse: BaseModel](
+    job_id: str,
+    result_cls: type[TResult],
+    response_cls: type[TResponse],
+) -> TResponse:
+    """Shared job-status reader. The two response shapes (generate/render)
+    are structurally identical apart from the `result` field's type, so we
+    parametrise on the result model and the response wrapper.
 
     For finished jobs we read via `result_info()` instead of `result()` so a
     worker exception surfaces as a structured `error` field rather than
@@ -83,23 +107,21 @@ async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
     arq_status = await job.status()
     status: JobStatus = _STATUS_MAP.get(arq_status, "not_found")
 
-    enqueue_time: datetime | None = None
-    start_time: datetime | None = None
-    finish_time: datetime | None = None
-    result_payload: OfferGenerateResponse | None = None
+    enqueue_time = None
+    start_time = None
+    finish_time = None
+    result_payload: TResult | None = None
     error: str | None = None
 
     if arq_status == ArqJobStatus.complete:
-        # result_info returns a JobResult (subclass of JobDef) with success +
-        # result/exception + timing. Does not block, does not re-raise on
-        # exception payloads — but it CAN raise if the stored pickle is
-        # corrupt (e.g. an old job from before we wrapped worker exceptions
-        # in plain RuntimeErrors). Treat that as a clean "failed" so the
-        # frontend can show an actionable error instead of an opaque 503.
+        # result_info CAN raise if the stored pickle is corrupt (e.g. an old
+        # job from before we wrapped worker exceptions in plain RuntimeErrors).
+        # Treat that as a clean "failed" so the frontend can show an
+        # actionable error instead of an opaque 503.
         try:
             job_result = await job.result_info()
         except Exception as exc:  # noqa: BLE001 — surface ALL deserialize errors
-            return OfferJobStatusResponse(
+            return response_cls(
                 job_id=job_id,
                 status="failed",
                 error=f"Unable to deserialize job result: {type(exc).__name__}: {exc}",
@@ -110,7 +132,7 @@ async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
             start_time = job_result.start_time
             finish_time = job_result.finish_time
             if job_result.success and isinstance(job_result.result, dict):
-                result_payload = OfferGenerateResponse.model_validate(job_result.result)
+                result_payload = result_cls.model_validate(job_result.result)
             else:
                 status = "failed"
                 raw = job_result.result
@@ -127,7 +149,7 @@ async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
         if info is not None:
             enqueue_time = info.enqueue_time
 
-    return OfferJobStatusResponse(
+    return response_cls(
         job_id=job_id,
         status=status,
         enqueue_time=enqueue_time,
@@ -135,4 +157,16 @@ async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
         finish_time=finish_time,
         result=result_payload,
         error=error,
+    )
+
+
+async def get_offer_job_status(job_id: str) -> OfferJobStatusResponse:
+    """Look up a generate_offer_job's status and (if finished) its result."""
+    return await _read_job_status(job_id, OfferGenerateResponse, OfferJobStatusResponse)
+
+
+async def get_render_job_status(job_id: str) -> OfferRenderJobStatusResponse:
+    """Look up a render_offer_job's status and (if finished) its result."""
+    return await _read_job_status(
+        job_id, OfferRenderResponse, OfferRenderJobStatusResponse
     )

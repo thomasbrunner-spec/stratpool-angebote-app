@@ -366,3 +366,16 @@ class OfferJobStatusResponse(BaseModel):
     finish_time: datetime | None = None
     result: OfferGenerateResponse | None = None
     error: str | None = None
+
+
+class OfferRenderJobStatusResponse(BaseModel):
+    """Returned by GET /offers/render/jobs/{job_id} — same shape as the
+    generate-job status response but the result is an OfferRenderResponse."""
+
+    job_id: str
+    status: JobStatus
+    enqueue_time: datetime | None = None
+    start_time: datetime | None = None
+    finish_time: datetime | None = None
+    result: OfferRenderResponse | None = None
+    error: str | None = None

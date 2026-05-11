@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.db import AsyncSessionLocal
 from app.schemas.offer import OfferGenerateRequest
 from app.services.offer_generator import generate_offer
+from app.services.offer_renderer import RenderFormat, perform_offer_render
 
 settings = get_settings()
 
@@ -65,14 +66,48 @@ async def generate_offer_job(
     return response.model_dump(mode="json")
 
 
+async def render_offer_job(
+    ctx: dict,
+    offer_id: str,
+    fmt: RenderFormat,
+) -> dict:
+    """Worker entry for the skill-driven PPT/Word render.
+
+    Anthropic's code-execution renderer routinely runs 2–5 minutes — well
+    past the 60-s proxy timeout — so it lives in the worker. Returns the
+    same OfferRenderResponse shape the sync endpoint used to produce,
+    serialised to a JSON-safe dict.
+    """
+    parsed_id = uuid.UUID(offer_id)
+    logger.info(
+        f"[worker] render_offer_job start "
+        f"job_id={ctx.get('job_id')} offer_id={offer_id} format={fmt}"
+    )
+    try:
+        async with AsyncSessionLocal() as session:
+            response = await perform_offer_render(session, parsed_id, fmt)
+    except Exception as exc:
+        logger.exception(
+            f"[worker] render_offer_job failed "
+            f"job_id={ctx.get('job_id')} offer_id={offer_id} format={fmt}"
+        )
+        raise RuntimeError(f"{type(exc).__name__}: {exc}") from exc
+    logger.info(
+        f"[worker] render_offer_job done "
+        f"job_id={ctx.get('job_id')} offer_id={offer_id} format={fmt}"
+    )
+    return response.model_dump(mode="json")
+
+
 class WorkerSettings:
     """Arq worker configuration — `uv run arq app.worker.WorkerSettings`."""
 
-    functions = [generate_offer_job]
+    functions = [generate_offer_job, render_offer_job]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     # Offer generation with max_tokens=32k can stream for several minutes.
+    # Render via Anthropic code-execution can run up to ~7 minutes.
     # Keep the per-job timeout generous, but bounded.
-    job_timeout = 600
+    job_timeout = 900
     # Keep results around long enough for the frontend to poll after the
     # user navigates away and comes back. 24h is plenty; the offer itself
     # is already persisted in Postgres.
