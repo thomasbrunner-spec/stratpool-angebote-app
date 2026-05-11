@@ -23,6 +23,8 @@ from app.schemas.offer import (
     OfferListItem,
     OfferRenderJobStatusResponse,
     OfferStatusUpdate,
+    OfferVersionDetail,
+    OfferVersionSummary,
 )
 from app.services.auth import CurrentUser
 from app.services.job_queue import (
@@ -277,6 +279,107 @@ async def update_offer_content(
     session.add(new_version)
     await session.commit()
     return await _load_detail(session, offer_id)
+
+
+@router.get(
+    "/{offer_id}/versions",
+    response_model=list[OfferVersionSummary],
+)
+async def list_offer_versions(
+    offer_id: uuid.UUID,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> list[OfferVersionSummary]:
+    """List all user-renderable versions of an offer, newest first.
+
+    Legacy v1 versions are filtered out — they would not validate against
+    the OfferContent schema and aren't viewable in the UI. `is_current`
+    marks the highest version_number that's user-renderable.
+    """
+    offer = await session.get(
+        Offer,
+        offer_id,
+        options=[selectinload(Offer.versions)],
+        populate_existing=True,
+    )
+    if offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} not found",
+        )
+
+    user_versions = [v for v in offer.versions if _is_user_content(v.content_json)]
+    if not user_versions:
+        return []
+
+    current_version_number = max(v.version_number for v in user_versions)
+    user_versions.sort(key=lambda v: v.version_number, reverse=True)
+
+    return [
+        OfferVersionSummary(
+            id=v.id,
+            version_number=v.version_number,
+            revision_notes=v.revision_notes,
+            created_at=v.created_at,
+            is_current=v.version_number == current_version_number,
+        )
+        for v in user_versions
+    ]
+
+
+@router.get(
+    "/{offer_id}/versions/{version_number}",
+    response_model=OfferVersionDetail,
+)
+async def get_offer_version(
+    offer_id: uuid.UUID,
+    version_number: int,
+    user: CurrentUser,
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> OfferVersionDetail:
+    """Return the structured content of a specific version of an offer."""
+    offer = await session.get(
+        Offer,
+        offer_id,
+        options=[selectinload(Offer.versions)],
+        populate_existing=True,
+    )
+    if offer is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} not found",
+        )
+
+    target = next(
+        (v for v in offer.versions if v.version_number == version_number),
+        None,
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Offer {offer_id} has no version {version_number}",
+        )
+    if not _is_user_content(target.content_json):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=(
+                f"Version {version_number} of offer {offer_id} is in legacy "
+                "format and not renderable as user content"
+            ),
+        )
+
+    user_versions = [v for v in offer.versions if _is_user_content(v.content_json)]
+    current_version_number = max(v.version_number for v in user_versions)
+
+    return OfferVersionDetail(
+        offer_id=offer.id,
+        version_id=target.id,
+        version_number=target.version_number,
+        revision_notes=target.revision_notes,
+        created_at=target.created_at,
+        is_current=target.version_number == current_version_number,
+        content=OfferContent.model_validate(target.content_json),
+    )
 
 
 @router.post(

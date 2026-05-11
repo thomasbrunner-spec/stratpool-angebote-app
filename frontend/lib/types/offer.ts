@@ -120,6 +120,24 @@ export interface OfferDetail {
   co_consultant_name: string | null;
 }
 
+export interface OfferVersionSummary {
+  id: string;
+  version_number: number;
+  revision_notes: string | null;
+  created_at: string;
+  is_current: boolean;
+}
+
+export interface OfferVersionDetail {
+  offer_id: string;
+  version_id: string;
+  version_number: number;
+  revision_notes: string | null;
+  created_at: string;
+  is_current: boolean;
+  content: OfferContent;
+}
+
 export interface OfferStatusUpdate {
   status: OfferStatus;
 }

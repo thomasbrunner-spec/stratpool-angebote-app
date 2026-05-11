@@ -314,6 +314,32 @@ class OfferDetail(BaseModel):
     co_consultant_name: str | None = None
 
 
+class OfferVersionSummary(BaseModel):
+    """Row in the GET /offers/{id}/versions list view.
+
+    `is_current` flags the version whose content is shown on the detail page
+    (i.e. the highest version_number with user-renderable content).
+    """
+
+    id: uuid.UUID
+    version_number: int
+    revision_notes: str | None
+    created_at: datetime
+    is_current: bool
+
+
+class OfferVersionDetail(BaseModel):
+    """Read-only payload returned by GET /offers/{id}/versions/{version_number}."""
+
+    offer_id: uuid.UUID
+    version_id: uuid.UUID
+    version_number: int
+    revision_notes: str | None
+    created_at: datetime
+    is_current: bool
+    content: OfferContent
+
+
 class OfferStatusUpdate(BaseModel):
     """Body for PATCH /offers/{id}."""
 

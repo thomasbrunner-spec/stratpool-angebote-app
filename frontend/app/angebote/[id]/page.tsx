@@ -5,12 +5,14 @@ import { apiCall } from "@/lib/api";
 import { createClient } from "@/lib/supabase/server";
 import { LogoutButton } from "@/components/LogoutButton";
 import { OfferContentSection } from "@/components/OfferContentSection";
+import { OfferVersionHistory } from "@/components/OfferVersionHistory";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusSelector } from "@/components/StatusSelector";
 import { DownloadButtons } from "@/components/DownloadButtons";
 import {
   CONSULTING_TYPE_LABELS,
   type OfferDetail,
+  type OfferVersionSummary,
 } from "@/lib/types/offer";
 
 const DATE_FORMAT = new Intl.DateTimeFormat("de-DE", {
@@ -50,8 +52,12 @@ export default async function AngebotDetailPage({ params }: PageProps) {
   }
 
   let offer: OfferDetail;
+  let versions: OfferVersionSummary[] = [];
   try {
-    offer = await apiCall<OfferDetail>(`/api/v1/offers/${id}`);
+    [offer, versions] = await Promise.all([
+      apiCall<OfferDetail>(`/api/v1/offers/${id}`),
+      apiCall<OfferVersionSummary[]>(`/api/v1/offers/${id}/versions`),
+    ]);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     // 410 = legacy few-shot-pool entry, not user-facing content.
@@ -124,6 +130,8 @@ export default async function AngebotDetailPage({ params }: PageProps) {
         </Card>
 
         <OfferContentSection offerId={offer.id} content={offer.content} />
+
+        <OfferVersionHistory offerId={offer.id} versions={versions} />
       </main>
     </>
   );
