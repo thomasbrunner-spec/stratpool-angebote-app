@@ -21,6 +21,9 @@ export default async function NeuesAngebotPage() {
         appName="Angebote"
         rightSlot={
           <>
+            <Link href="/angebote" className="text-xs text-text-dim hover:text-text">
+              Angebote
+            </Link>
             <Link href="/dashboard" className="text-xs text-text-dim hover:text-text">
               Dashboard
             </Link>

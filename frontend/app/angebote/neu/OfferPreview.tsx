@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Badge, Card } from "@thomasbrunner-spec/design-system";
 import { DownloadButtons } from "@/components/DownloadButtons";
 import { OfferContentSection } from "@/components/OfferContentSection";
@@ -37,6 +38,17 @@ export function OfferPreview({ result }: OfferPreviewProps) {
           <span className="font-mono text-xs text-text-muted">
             {result.retrieved_offer_ids.length} Few-Shots
           </span>
+          <div className="flex items-center gap-3 text-xs">
+            <Link
+              href={`/angebote/${result.offer_id}`}
+              className="text-signal hover:underline"
+            >
+              Detail öffnen →
+            </Link>
+            <Link href="/angebote" className="text-text-dim hover:text-text">
+              zur Liste
+            </Link>
+          </div>
         </div>
       </div>
 
