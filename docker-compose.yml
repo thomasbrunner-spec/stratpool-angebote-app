@@ -31,6 +31,8 @@ x-backend-env: &backend-env
   ERA_WORD_SKILL_ID: ${ERA_WORD_SKILL_ID:-}
   FEW_SHOT_FILE_IDS: ${FEW_SHOT_FILE_IDS:-}
   REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  HEDY_API_KEY: ${HEDY_API_KEY:-}
+  HEDY_BASE_URL: ${HEDY_BASE_URL:-https://api.hedy.bot}
 
 services:
   redis:

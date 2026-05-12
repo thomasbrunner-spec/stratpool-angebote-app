@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     # Redis (Arq job queue for async offer generation)
     redis_url: str = "redis://redis:6379/0"
 
+    # Hedy meeting-assistant — REST API, Bearer-token auth.
+    # Empty key disables the Hedy routes (they return 503) so dev environments
+    # without a Pro subscription stay functional.
+    hedy_api_key: str = ""
+    # Hedy paths live at the root (e.g. /sessions, not /v1/sessions). The /v1
+    # in the marketing docs refers to the API version, not a URL prefix.
+    hedy_base_url: str = "https://api.hedy.bot"
+
     # Berater profile (primary consultant on the right of the cover slide).
     # Single-tenant for now — moves to a per-user profile when we onboard a
     # second user. The secondary consultant is per-offer (see consultants table).

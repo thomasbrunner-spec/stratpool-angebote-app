@@ -17,6 +17,8 @@ import {
   EMPTY_CO_CONSULTANT,
   type CoConsultantSelectorValue,
 } from "@/components/CoConsultantSelector";
+import { HedySessionPicker } from "@/components/HedySessionPicker";
+import type { HedySessionDetail } from "@/lib/types/hedy";
 import { OfferPreview } from "./OfferPreview";
 
 const FIELD_DEFAULTS = {
@@ -47,12 +49,46 @@ export function GenerateForm() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OfferGenerateResponse | null>(null);
+  const [hedyOpen, setHedyOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const loading = phase === "queued" || phase === "running";
 
   const update = <K extends keyof typeof fields>(key: K, value: (typeof fields)[K]) =>
     setFields((prev) => ({ ...prev, [key]: value }));
+
+  // Apply a Hedy session to the form: transcript replaces transcript field,
+  // session_notes are merged into user_notes. Confirm before overwriting
+  // existing user input so we don't silently lose work.
+  const applyHedySession = (detail: HedySessionDetail) => {
+    setFields((prev) => {
+      const next = { ...prev };
+      if (prev.transcript.trim() && prev.transcript.trim() !== detail.transcript.trim()) {
+        if (!window.confirm("Es ist bereits ein Transkript eingetragen. Mit dem Hedy-Transkript überschreiben?")) {
+          return prev;
+        }
+      }
+      next.transcript = detail.transcript;
+      if (detail.sessionNotes && detail.sessionNotes.trim()) {
+        if (!prev.user_notes.trim()) {
+          next.user_notes = detail.sessionNotes;
+        } else if (
+          window.confirm(
+            "Hedy-Session-Notizen mit den bestehenden Berater-Anmerkungen verbinden?",
+          )
+        ) {
+          next.user_notes = `${detail.sessionNotes}\n\n— Berater-Anmerkungen —\n${prev.user_notes}`;
+        }
+      }
+      // Pre-fill client name from session title if empty: titles use "Kunde - …"
+      if (!prev.client_name.trim()) {
+        const guessed = detail.title.split(/\s*[-–]\s*/)[0]?.trim();
+        if (guessed) next.client_name = guessed;
+      }
+      return next;
+    });
+    setHedyOpen(false);
+  };
 
   // Elapsed-time counter for the running state — keeps the spinner honest
   // (long generations would otherwise look frozen).
@@ -278,7 +314,17 @@ export function GenerateForm() {
             />
 
             <Field>
-              <Label htmlFor="transcript">Discovery-Transkript</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="transcript">Discovery-Transkript</Label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setHedyOpen(true)}
+                  disabled={loading}
+                >
+                  Aus Hedy-Session laden
+                </Button>
+              </div>
               <textarea
                 id="transcript"
                 required
@@ -342,6 +388,12 @@ export function GenerateForm() {
           <OfferPreview result={result} />
         </div>
       )}
+
+      <HedySessionPicker
+        open={hedyOpen}
+        onClose={() => setHedyOpen(false)}
+        onSelect={applyHedySession}
+      />
     </div>
   );
 }

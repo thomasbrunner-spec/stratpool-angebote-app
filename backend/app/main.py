@@ -13,7 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.config import get_settings
-from app.routes import consultants, health, hello, offers, prompts
+from app.routes import consultants, health, hedy, hello, offers, prompts
+from app.services.hedy import close_client as close_hedy_client
 from app.services.job_queue import close_pool
 
 settings = get_settings()
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info(f"👋 Shutting down {settings.app_name}")
     await close_pool()
+    await close_hedy_client()
 
 
 # ---------------- App ----------------
@@ -69,6 +71,7 @@ app.include_router(hello.router, prefix=settings.api_prefix)
 app.include_router(offers.router, prefix=settings.api_prefix)
 app.include_router(consultants.router, prefix=settings.api_prefix)
 app.include_router(prompts.router, prefix=settings.api_prefix)
+app.include_router(hedy.router, prefix=settings.api_prefix)
 
 
 @app.get("/")
