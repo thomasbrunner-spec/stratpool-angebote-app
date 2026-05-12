@@ -61,9 +61,9 @@ def _example_generate_user_message() -> str:
         transcript=("<DISCOVERY-CALL-TRANSKRIPT — voller Wortlaut des Termins>"),
         user_notes="<OPTIONAL: ANMERKUNGEN VOM BERATER>",
     )
-    # No few-shots in the example; the prose blob below explains how they
-    # would be inserted in a real call.
-    return offer_generator._build_user_message(mock_request, retrieved=[])
+    # No few-shots / no knowledge in the example; the prose blob below
+    # explains how they would be inserted in a real call.
+    return offer_generator._build_user_message(mock_request, retrieved=[], knowledge=[])
 
 
 def _example_render_user_message(fmt: render_via_skill.RenderFormat) -> str:
