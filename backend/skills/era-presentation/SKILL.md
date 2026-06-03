@@ -148,7 +148,13 @@ add_white_textbox(cover_slide, left_in=0.787, top_in=4.95, width_in=4.5, height_
 # Fett-Setzungen nur für Hervorhebungen einzelner Wörter, nie für ganze Absätze.
 
 # ── 6. SPEICHERN ──────────────────────────────────────────────────────────────
-OUTPUT = "/home/claude/era_presentation.pptx"
+# WICHTIG: Speichern MUSS unter $OUTPUT_DIR erfolgen, sonst landet die Datei
+# nur im Sandbox-Home und wird NICHT in die Files API promoted — der Caller
+# sieht dann new_files=0 und wirft RenderError.
+import os
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/mnt/user-data/outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT = os.path.join(OUTPUT_DIR, "era_presentation.pptx")
 prs.save(OUTPUT)
 print(f"Gespeichert: {OUTPUT}")
 ```
@@ -882,10 +888,14 @@ Wenn `OfferContent` komplett ist (was es bei v2 immer sein muss), keine Inhalte 
 
 ## QA (Pflicht nach jeder Erstellung)
 
-```bash
-python -m markitdown /home/claude/era_presentation.pptx
+Hinweis: Die fertige Datei liegt unter `$OUTPUT_DIR/era_presentation.pptx`
+(siehe Schritt 6 oben). Die QA-Befehle nutzen denselben Pfad.
 
-python /mnt/skills/public/pptx/scripts/office/soffice.py --headless --convert-to pdf /home/claude/era_presentation.pptx
+```bash
+OUT="${OUTPUT_DIR:-/mnt/user-data/outputs}"
+python -m markitdown "$OUT/era_presentation.pptx"
+
+python /mnt/skills/public/pptx/scripts/office/soffice.py --headless --convert-to pdf "$OUT/era_presentation.pptx" --outdir /home/claude
 rm -f /home/claude/slide-*.jpg
 pdftoppm -jpeg -r 150 /home/claude/era_presentation.pdf /home/claude/slide
 ls -1 /home/claude/slide-*.jpg

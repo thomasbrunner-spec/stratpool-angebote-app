@@ -160,7 +160,7 @@ def _build_user_message(
 - Body-Text in normaler Schrift (regular), nicht fett (außer für Headlines/Hervorhebungen).
 - Body-Folien nutzen mehrheitlich `Leer`-Layout mit eigenen Kompositionen (siehe SKILL Recipes). KEIN durchgehender Einsatz von `1 x Content`.
 - KEINE Bullet-Listen mit weniger als 3 Punkten. KEIN „Modul A/B/C"-Pattern.
-- Schreibe das Ergebnis nach `/home/claude/{spec.output_filename}` und führe die im Skill beschriebenen QA-Schritte aus.
+- Schreibe das Ergebnis nach `$OUTPUT_DIR/{spec.output_filename}` (workspace output dir, damit die Datei vom Host abgeholt werden kann — nicht nach `/home/claude/`, die Bytes erreichen den Host sonst nicht) und führe die im Skill beschriebenen QA-Schritte aus.
 - Antworte am Ende mit dem absoluten Pfad zur fertigen Datei und einer 1-Satz-Zusammenfassung."""
 
     # Mark the text block as the cache breakpoint. Anthropic caches everything
