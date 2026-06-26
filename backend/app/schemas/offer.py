@@ -29,9 +29,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from annotated_types import MaxLen
 from json_repair import repair_json
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from app.models.offer import CONSULTING_TYPES
 
@@ -54,6 +55,76 @@ class OfferGenerateRequest(BaseModel):
         default=None,
         description="Optional consultant from the consultants table — appears as second person on the cover slide",
     )
+
+
+# ---------------- defensive-coercion helpers ----------------
+
+# Top-level fields whose items are plain strings (not nested objects). Used to
+# decide where dict-shaped list items get flattened back into text.
+_STRING_LIST_FIELDS = {"warum_jetzt_argumente", "erkannte_anwendungsfaelle"}
+
+
+def _try_parse_json_list(v: str) -> Any:
+    """Recover a list from a JSON-string-encoded array (Opus tool-use quirk).
+
+    Three flavours observed in production:
+      1. Clean JSON array string — `json.loads` handles it directly.
+      2. Pseudo-JSON with literal `\\n`/`\\t` — unescape and retry.
+      3. Broken JSON (stray quotes, trailing commas) — `json-repair`.
+
+    Returns the original string unchanged if none of the strategies yield a
+    list, so the caller can let Pydantic raise a clean type error.
+    """
+    try:
+        return json.loads(v)
+    except json.JSONDecodeError:
+        pass
+    try:
+        unescaped = v.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+        return json.loads(unescaped)
+    except json.JSONDecodeError:
+        pass
+    try:
+        repaired = repair_json(v, return_objects=True)
+        if isinstance(repaired, list):
+            logger.warning(
+                f"[schema] _try_parse_json_list: recovered via json-repair "
+                f"(len={len(v)}, first 120={v[:120]!r})"
+            )
+            return repaired
+    except Exception as exc:  # noqa: BLE001 — json-repair is best-effort
+        logger.warning(f"[schema] json-repair also failed: {exc}")
+    return v
+
+
+def _coerce_to_text(item: Any) -> Any:
+    """Flatten a dict-shaped bullet back into a string.
+
+    Opus tool-use sometimes emits a string-list item as a small dict
+    (e.g. ``{"Vermeidung des 95%-Effekts": ""}`` or
+    ``{"ebene": "Menschlich", "punkt": "... statt Top-Down-Rollout"}``).
+    We join the non-empty string values, falling back to the keys, so the
+    content survives instead of failing the whole generation. Non-dict,
+    non-string items pass through for Pydantic to reject cleanly.
+    """
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        values = [v.strip() for v in item.values() if isinstance(v, str) and v.strip()]
+        if values:
+            return " — ".join(values)
+        keys = [str(k).strip() for k in item if str(k).strip()]
+        if keys:
+            return " — ".join(keys)
+    return item
+
+
+def _max_len(field: Any) -> int | None:
+    """Read the declared ``max_length`` cap off a Pydantic FieldInfo, if any."""
+    for meta in field.metadata:
+        if isinstance(meta, MaxLen):
+            return meta.max_length
+    return None
 
 
 # ---------------- v2 sub-models ----------------
@@ -108,6 +179,26 @@ class OfferMehrwertEbene(BaseModel):
         max_length=6,
         description="3-6 substantive bullet points per layer — never fewer than 3.",
     )
+
+    @field_validator("punkte", mode="before")
+    @classmethod
+    def _normalize_punkte(cls, v: Any) -> Any:
+        """Tolerate JSON-string encoding, dict-shaped items and over-long lists.
+
+        Opus tool-use occasionally emits the bullets of a value layer as dicts
+        instead of strings (see _coerce_to_text) and overshoots the 6-item cap.
+        Coerce + truncate rather than fail the whole offer over a formatting
+        quirk. Too-few bullets still raises — we never fabricate content.
+        """
+        if isinstance(v, str):
+            v = _try_parse_json_list(v)
+        if isinstance(v, list):
+            v = [_coerce_to_text(x) for x in v]
+            cap = _max_len(cls.model_fields["punkte"])
+            if cap is not None and len(v) > cap:
+                logger.warning(f"[schema] truncating mehrwert punkte {len(v)} -> {cap}")
+                v = v[:cap]
+        return v
 
 
 class OfferLeistungsItem(BaseModel):
@@ -213,52 +304,31 @@ class OfferContent(BaseModel):
         mode="before",
     )
     @classmethod
-    def _parse_list_if_json_string(cls, v: Any) -> Any:
-        """Tolerate Claude returning a nested list as a JSON string.
+    def _normalize_list_field(cls, v: Any, info: ValidationInfo) -> Any:
+        """Repair three Opus tool-use quirks before Pydantic validates a list.
 
-        Anthropic tool-use on Opus 4.7 sometimes serialises arrays of complex
-        objects (phasen, mehrwert_3_ebenen) as a single string instead of a
-        native list. Three flavours observed in production:
+        1. The whole array arrives JSON-string-encoded (see _try_parse_json_list).
+        2. A string-list item arrives as a dict (see _coerce_to_text); only
+           applied to the plain-string fields, never to nested-object lists.
+        3. The model overshoots the declared cap (e.g. 6 'warum_jetzt' instead
+           of 5). Truncating to the cap keeps the best content and the deck
+           layout contract, instead of throwing away the whole generation.
 
-          1. Clean JSON array string with real newlines/quotes — `json.loads`
-             handles it directly.
-          2. Pseudo-JSON where newlines/tabs are written as literal `\\n` /
-             `\\t` — `json.loads` rejects it; we unescape and retry.
-          3. Broken JSON with stray quotes, unescaped quotes inside strings,
-             trailing commas, etc. — typical LLM output. `json-repair` fixes
-             these heuristically.
-
-        Falls back to passthrough only if all three strategies fail. In that
-        case the raw input is logged at the call site so we can iterate.
+        We only ever drop excess items — too-few still raises, so we never
+        fabricate content the consultant didn't get.
         """
-        if not isinstance(v, str):
+        if isinstance(v, str):
+            v = _try_parse_json_list(v)
+        if not isinstance(v, list):
             return v
-        # 1) plain JSON
-        try:
-            return json.loads(v)
-        except json.JSONDecodeError:
-            pass
-        # 2) un-escape literal control sequences and retry
-        try:
-            unescaped = (
-                v.replace("\\n", "\n")
-                .replace("\\t", "\t")
-                .replace("\\r", "\r")
+        if info.field_name in _STRING_LIST_FIELDS:
+            v = [_coerce_to_text(x) for x in v]
+        cap = _max_len(cls.model_fields[info.field_name])
+        if cap is not None and len(v) > cap:
+            logger.warning(
+                f"[schema] truncating {info.field_name} {len(v)} -> {cap} (Opus overshoot)"
             )
-            return json.loads(unescaped)
-        except json.JSONDecodeError:
-            pass
-        # 3) json-repair as last resort — designed for LLM-corrupted JSON
-        try:
-            repaired = repair_json(v, return_objects=True)
-            if isinstance(repaired, list):
-                logger.warning(
-                    f"[schema] _parse_list_if_json_string: recovered via "
-                    f"json-repair (len={len(v)}, first 120={v[:120]!r})"
-                )
-                return repaired
-        except Exception as exc:  # noqa: BLE001 — json-repair is best-effort
-            logger.warning(f"[schema] json-repair also failed: {exc}")
+            v = v[:cap]
         return v
 
 

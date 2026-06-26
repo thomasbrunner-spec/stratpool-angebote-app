@@ -220,6 +220,49 @@ def test_content_rejects_unparseable_string_for_list_field() -> None:
         OfferContent(**bad)
 
 
+def test_content_truncates_overlong_string_lists() -> None:
+    """Opus overshoot: 6 warum / 15 use-cases get capped, not rejected."""
+    kwargs = _valid_content_kwargs()
+    kwargs["warum_jetzt_argumente"] = [f"Argument {i}" for i in range(6)]
+    kwargs["erkannte_anwendungsfaelle"] = [f"Use-Case {i}" for i in range(15)]
+    content = OfferContent(**kwargs)
+    assert len(content.warum_jetzt_argumente) == 5
+    assert len(content.erkannte_anwendungsfaelle) == 10
+
+
+def test_content_truncates_overlong_object_list() -> None:
+    """Over-cap nested-object lists (mehrwert > 3) truncate to the cap."""
+    kwargs = _valid_content_kwargs()
+    extra = dict(kwargs["mehrwert_3_ebenen"][0])
+    extra["ebene"] = "Wirtschaftlich"
+    kwargs["mehrwert_3_ebenen"] = kwargs["mehrwert_3_ebenen"] + [extra]
+    content = OfferContent(**kwargs)
+    assert len(content.mehrwert_3_ebenen) == 3
+
+
+def test_mehrwert_punkte_coerces_dict_items_to_text() -> None:
+    """Opus emits a bullet as a dict instead of a string — flatten it."""
+    kwargs = _valid_content_kwargs()
+    kwargs["mehrwert_3_ebenen"][1]["punkte"] = [
+        "Transparente Bewertung von Prozessen",
+        {"Vermeidung des 95-%-Effekts durch frühe Einbindung": ""},
+        {"ebene": "Menschlich", "punkt": "Beteiligung statt Top-Down-Rollout"},
+    ]
+    content = OfferContent(**kwargs)
+    punkte = content.mehrwert_3_ebenen[1].punkte
+    assert all(isinstance(p, str) for p in punkte)
+    assert "95-%-Effekts" in punkte[1]
+    assert "Top-Down-Rollout" in punkte[2]
+
+
+def test_content_still_rejects_too_few_items() -> None:
+    """Truncation never fabricates: too-few-items must still fail hard."""
+    bad = _valid_content_kwargs()
+    bad["warum_jetzt_argumente"] = ["nur eines"]
+    with pytest.raises(ValidationError):
+        OfferContent(**bad)
+
+
 def test_content_json_schema_lists_all_v2_required_fields() -> None:
     """Anthropic tool input_schema requires properties + required at the root."""
     schema = OfferContent.model_json_schema()
